@@ -1,0 +1,60 @@
+# 디딤돌 설정 파일. API 키 값은 여기에 쓰지 말고 환경변수로만 넣습니다.
+district: 누리마루지구          # 처음 보여 줄 지구(문서에 지구가 없으면 이 지구로 봄)
+report:
+  dept: 누리마루사업단 광역교통팀   # 보고서 날짜줄에 들어가는 작성 부서 (화면에서 바꿀 수 있음)
+
+# 모델 교체 지점. 앱의 모든 LLM 호출은 llm.py의 ask()를 거치며 아래 값만 읽습니다.
+llm:
+  provider: anthropic              # anthropic 또는 openai_compatible
+  model: claude-sonnet-5-5
+  base_url: https://api.anthropic.com
+  api_key_env: ANTHROPIC_API_KEY   # 키를 담은 환경변수 이름 (키 값 아님)
+  max_tokens: 4096
+
+# 두 번째 모델 예: OpenAI 호환 주소(base_url)가 있는 모델이면 위 llm 블록을 이렇게 바꿉니다.
+# llm:
+#   provider: openai_compatible
+#   model: <모델 이름>
+#   base_url: http://localhost:11434/v1     # 예: 로컬 서버. 사내·클라우드 주소도 가능
+#   api_key_env: OPENAI_API_KEY             # 키가 필요 없는 로컬 서버면 빈 값("")
+#   max_tokens: 4096
+#   json_response_format: true              # 서버가 response_format을 지원할 때만 true
+
+# 사업지구와 광역교통시설(사업). type은 사업 유형(도로/철도/환승/대중교통)으로, 통합 비교·필터와 추출 항목에 쓴다.
+# 문서마다 어느 지구 문서인지 지정하며(파일명에 지구 이름이 있으면 자동), 판정은 지구별로 따로 한다.
+districts:
+  - name: 누리마루지구
+    key: 누리마루                  # 파일명에서 지구를 알아볼 때 쓰는 낱말
+    facilities:
+      - {name: 가온방면 연결도로, type: 도로}
+      - {name: 다온방면 도로확장, type: 도로}
+      - {name: 누리마루선(광역철도), type: 철도}
+      - {name: 환승센터, type: 환승}
+      - {name: 입주 초기 버스 지원, type: 대중교통}
+  - name: 한빛지구
+    key: 한빛
+    facilities:
+      - {name: 한빛IC 연결도로, type: 도로}
+      - {name: 새솔로 확장, type: 도로}
+      - {name: 한빛선 연장(광역철도), type: 철도}
+      - {name: 한빛 BRT, type: 대중교통}
+      - {name: 한빛 환승주차장, type: 환승}
+  - name: 솔내지구
+    key: 솔내
+    facilities:
+      - {name: 솔내 연결도로, type: 도로}
+      - {name: 솔내역 환승센터, type: 환승}
+      - {name: 솔내 순환버스 지원, type: 대중교통}
+
+# 사업 유형별로 문서에서 뽑을 항목(항목·단위). 단위는 이 목록으로 통일한다.
+# kind: attr = 짧은 속성(시행주체), status = 추진상태, issue = 현안, plan = 향후계획. 문장형도 같은 판정 규칙으로 최신값을 정한다.
+item_templates:
+  도로:     [{item: 연장, unit: km}, {item: 차로, unit: 차로}, {item: 사업비, unit: 억원}, {item: 완료시기, unit: ""}]
+  철도:     [{item: 연장, unit: km}, {item: 사업비, unit: 억원}, {item: 개통목표, unit: ""}]
+  환승:     [{item: 규모, unit: ㎡}, {item: 사업비, unit: 억원}, {item: 완료시기, unit: ""}]
+  대중교통: [{item: 연장, unit: km}, {item: 사업비, unit: 억원}, {item: 지원액, unit: 억원}, {item: 완료시기, unit: ""}]
+common_items:
+  - {item: 시행주체, unit: "", kind: attr}
+  - {item: 추진상태, unit: "", kind: status}
+  - {item: 현안, unit: "", kind: issue}
+  - {item: 향후계획, unit: "", kind: plan}

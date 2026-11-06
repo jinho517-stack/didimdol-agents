@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+output/*
+!output/.gitkeep
+# 회사 보고서 양식(내부 서식) — 공개 저장소에 올리지 않음
+templates/company/
