@@ -29,8 +29,8 @@ from common import catalog, llm
 BASE = Path(__file__).parent
 SAMPLE = BASE / 'sample'
 UPLOADS = db.OUTPUT / 'uploads'
-NAV = ['🏠 처음', '💾 DB', '📝 보고서 작성']  # 상단 메뉴(멘토 의견: 대시보드·챗봇은 뺌)
-HOME, DOCS, REPORT = NAV
+NAV = ['새 보고서', '내 보고서', '자료 DB', '서식 규칙']  # 새 디자인 시안 메뉴(+ 자료 DB: 적재 현황·값 충돌·통합 비교)
+NEW, REVIEW, DOCS, RULES = NAV
 DB_VIEWS = ['📥 자료 적재', '🗂 적재 현황·관리', '🔎 통합 비교']  # 올리기는 자료 적재 한 곳, 확인·수정은 적재 현황·관리
 DB_HELP = {'📥 자료 적재': '여러 자료를 한 번에 올리면 → 교통대책·내용별로 나누고 → 애매한 것만 사람이 확인한 뒤 → DB에 적재합니다.',
            '🗂 적재 현황·관리': 'DB에 들어간 값·추진경위와 적재된 문서를 보고, 문서 정보를 고치거나 빼는 곳입니다. '
@@ -154,10 +154,11 @@ st.markdown("""<style>
 
 # 조원 디자인 시안(광역교통개선대책_DB_v0.3.html): 남색·연두, 왼쪽 메뉴, 초록 줄 제목 막대, 연한 바탕 위 흰 카드
 st.markdown("""<style>
-:root{--dg-pri:#0B3A8A;--dg-grn:#7FC31B;--dg-grn-ink:#3d6b0a;--dg-gray:#4D4D4D;--dg-bg:#eef3fa;--dg-card:#fff;
-      --dg-line:#dfe3e9;--dg-mut:#5b6472;--dg-ink:#14171c}
-@media (prefers-color-scheme:dark){:root{--dg-pri:#5b8fe6;--dg-grn:#8fd62a;--dg-grn-ink:#b6ee6a;--dg-gray:#3a414b;
-      --dg-bg:#0f1318;--dg-card:#171c23;--dg-line:#2a313b;--dg-mut:#a3adbb;--dg-ink:#eceff4}}
+:root{--dg-pri:#1f6f5c;--dg-grn:#1f6f5c;--dg-grn-ink:#15513f;--dg-gray:#4a4740;--dg-bg:#fbfbfa;--dg-card:#fff;
+      --dg-line:#e7e5e0;--dg-mut:#6b6760;--dg-ink:#1c1b19;
+      --bg:#fbfbfa;--surface:#fff;--sunken:#efeeea;--line:#e7e5e0;--line-strong:#cfccc4;--ink:#1c1b19;--ink-2:#4a4740;
+      --muted:#6b6760;--accent:#1f6f5c;--accent-soft:#e8f3ef;--accent-mark:#d9efe7;--warn:#b45309;--warn-bg:#fff6e5;
+      --warn-ink:#7a4700;--warn-mark:#ffe9c2;--box-bg:#fdfeeb;--r-sm:12px;--r-md:14px;--r-lg:20px}
 [data-testid="stMain"]{background:var(--dg-bg)}
 [data-testid="stHeader"]{background:transparent}
 [data-testid="stMainBlockContainer"]{padding-top:1.2rem;max-width:1400px}
@@ -278,6 +279,99 @@ st.markdown("""<style>
 .ik-cap small{font-weight:400}
 .db-help{font-size:.84rem;color:var(--dg-mut);background:var(--dg-card);border-left:4px solid var(--dg-grn);border-radius:8px;
          padding:8px 12px;margin:-4px 0 12px}
+</style>""", unsafe_allow_html=True)
+
+# 새 디자인 시안(2026-11-08): 따뜻한 무채색 + 초록 포인트, 검은 주 버튼, 테두리 카드, Noto Sans KR
+st.markdown("""<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap');
+[data-testid="stMain"] *{word-break:keep-all}
+[data-testid="stMain"]{background:var(--bg)}
+[data-testid="stMainBlockContainer"]{max-width:1280px;padding-top:.6rem}
+/* 상단 바: 로고 + 알약 메뉴 */
+.st-key-topbar{background:transparent !important;border:0 !important;padding:6px 0 !important;margin-bottom:4px}
+.st-key-tb_home button{background:transparent !important;border:0 !important;padding:0;min-height:0}
+.st-key-tb_home button p{font-size:20px !important;font-weight:700;color:var(--ink) !important;letter-spacing:-.03em}
+.st-key-tb_home button:after{display:none}
+.st-key-top_nav button[data-variant]{border:0 !important;background:transparent !important;border-radius:999px !important;padding:8px 14px}
+.st-key-top_nav button[data-variant] p{color:#5f5b54 !important;font-size:15px;font-weight:400 !important}
+.st-key-top_nav button[data-variant][data-selected="true"]{background:var(--sunken) !important}
+.st-key-top_nav button[data-variant][data-selected="true"] p{color:var(--ink) !important;font-weight:500 !important}
+.st-key-top_nav [role="radiogroup"]{border:0;gap:4px}
+.tb-sub{display:none}
+/* 버튼: 주 버튼은 검정, 나머지는 흰 바탕 + 테두리 */
+[data-testid="stMain"] [data-testid="stBaseButton-primary"]{background:var(--ink) !important;border-color:var(--ink) !important;
+  color:#fff !important;font-weight:700;min-height:48px}
+[data-testid="stMain"] [data-testid="stBaseButton-primary"]:hover{background:#000 !important;border-color:#000 !important}
+[data-testid="stMain"] [data-testid="stBaseButton-primary"] p{color:#fff !important}
+[data-testid="stMain"] [data-testid="stBaseButton-secondary"],[data-testid="stMain"] [data-testid="stDownloadButton"] button{
+  min-height:48px;border-color:var(--line-strong);background:var(--surface)}
+/* 카드: 테두리만(그림자 없음), 모서리 20px */
+[data-testid="stMain"] [class*="st-key-card"]{background:var(--surface) !important;border:1px solid var(--line) !important;
+  border-radius:var(--r-lg) !important;box-shadow:none !important}
+/* 입력칸: 흰 바탕 + 진한 테두리 */
+[data-testid="stMain"] [data-testid="stTextInputRootElement"],[data-testid="stMain"] [data-baseweb="select"]>div,
+[data-testid="stMain"] [data-testid="stTextAreaRootElement"],
+[data-testid="stMain"] [class*="st-key-card"] [data-testid="stTextInputRootElement"],
+[data-testid="stMain"] [class*="st-key-card"] [data-baseweb="select"]>div,
+[data-testid="stMain"] [class*="st-key-card"] [data-testid="stTextAreaRootElement"]{background:var(--surface) !important}
+[data-testid="stMain"] label p{font-weight:500;color:var(--ink-2)}
+/* 고른 알약·탭: 연한 회색 바탕 */
+[data-testid="stMain"] button[data-variant][data-selected="true"]{background:var(--sunken) !important;border-color:var(--line-strong) !important}
+[data-testid="stMain"] button[data-variant][data-selected="true"] p{color:var(--ink) !important;font-weight:500}
+/* 1. 새 보고서 */
+.nw-steps{margin:8px 0 0;padding:0;list-style:none;display:flex;flex-wrap:wrap;gap:8px 24px;font-size:15px;color:var(--muted)}
+.nw-steps li{display:flex;align-items:center;gap:8px}
+.nw-steps li::before{content:'';width:8px;height:8px;border-radius:50%;background:#d6d3cc}
+.nw-steps li.on{color:var(--accent);font-weight:700}.nw-steps li.on::before{background:var(--accent)}
+.nw-hero h1{margin:16px 0 12px;font-size:40px;line-height:1.3;font-weight:700;letter-spacing:-.035em;color:var(--ink);padding:0}
+.nw-hero p{margin:0 0 8px;font-size:18px;line-height:1.7;color:#5f5b54}
+.st-key-nw_drop [data-testid="stFileUploaderDropzone"]{background:var(--surface);border:1.5px dashed #bdb9b0;border-radius:var(--r-lg);
+  padding:36px 24px}
+.st-key-nw_drop [data-testid="stFileUploaderDropzoneInstructions"] span{font-size:14px;font-weight:400;color:var(--muted)}
+.st-key-nw_drop label p{font-size:20px !important;font-weight:700 !important;color:var(--ink) !important;letter-spacing:-.02em}
+.st-key-nw_drop label{margin-bottom:6px}
+.st-key-nw_drop [data-testid="stFileUploaderDropzone"] button{border:1px solid var(--ink);min-height:44px;padding:0 20px}
+.nw-files{margin:6px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:10px}
+.nw-file{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--r-md);padding:14px 18px}
+.nw-file .ext{flex:none;width:48px;height:32px;border-radius:8px;background:var(--sunken);color:var(--ink-2);font-size:12px;
+  font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+.nw-file .info{flex:1 1 280px;min-width:0;display:flex;flex-direction:column;gap:2px}
+.nw-file .name{font-size:16px;font-weight:500;overflow-wrap:anywhere}.nw-file .meta{font-size:14px;color:var(--muted)}
+.nw-file .ok{font-size:14px;color:var(--accent);font-weight:500}.nw-file .wait{font-size:14px;color:var(--muted)}
+.nw-file .bad{font-size:14px;color:var(--warn);font-weight:500}
+.nw-h2{margin:0 0 4px;font-size:18px;font-weight:700;letter-spacing:-.02em;color:var(--ink)}
+.nw-hint{margin:4px 0 0;font-size:14px;line-height:1.6;color:var(--muted)}
+.nw-dist{font-size:15px;background:var(--accent-soft);color:var(--accent);border-radius:var(--r-sm);padding:10px 14px;margin:4px 0}
+.nw-dist.bad{background:var(--warn-bg);color:var(--warn-ink)}
+.nw-dist small{display:block;color:var(--muted);font-size:13px;margin-top:2px}
+.st-key-nw_go button{min-height:56px;font-size:18px;padding:0 32px;border-radius:var(--r-md) !important}
+/* 2. 내 보고서(초안 검토) */
+.rv-kicker{font-size:14px;color:var(--accent);font-weight:700}
+.rv-h1{margin:6px 0 0;font-size:30px;line-height:1.35;font-weight:700;letter-spacing:-.03em;color:var(--ink)}
+.rv-h2{margin:0 0 6px;font-size:15px;font-weight:700;color:var(--ink-2)}
+.rv-src{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);padding:14px 16px;margin-bottom:8px;
+  display:flex;flex-direction:column;gap:4px}
+.rv-src.main{border-color:var(--accent)}.rv-src .n{font-size:15px;font-weight:500;line-height:1.5;overflow-wrap:anywhere}
+.rv-src .u{font-size:14px;color:var(--muted)}
+.st-key-rv_doc{background:var(--sunken) !important;border:0 !important;border-radius:var(--r-lg) !important;padding:28px 16px !important}
+.st-key-rv_doc .lh{max-width:680px;margin:0 auto;border:0;box-shadow:0 2px 12px rgba(28,27,25,.08)}
+.rv-panel-head{display:flex;align-items:baseline;justify-content:space-between}
+.rv-panel-head h2{margin:0;font-size:18px;font-weight:700;letter-spacing:-.02em;padding:0}
+.rv-panel-head .score{font-size:14px;color:var(--accent);font-weight:700}
+.rv-checks{margin:14px 0 4px;padding:0;list-style:none;display:flex;flex-direction:column;gap:14px}
+.rv-checks li{display:flex;gap:12px;align-items:flex-start}
+.rv-dot{flex:none;width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;display:inline-flex;
+  align-items:center;justify-content:center;font-size:13px;font-weight:700;margin-top:2px}
+.rv-dot.warn{background:var(--warn)}
+.rv-checks .t{display:block;font-size:16px;font-weight:500;line-height:1.5}
+.rv-checks .d{display:block;font-size:14px;line-height:1.5;color:var(--muted)}
+.rv-notice{background:var(--warn-bg);border-radius:var(--r-lg);padding:20px 24px;display:flex;flex-direction:column;gap:8px;margin:12px 0}
+.rv-notice strong{font-size:16px;color:var(--warn-ink)}.rv-notice span{font-size:15px;line-height:1.6;color:#3d3a34}
+.rv-ok{background:var(--accent-soft);border-radius:var(--r-lg);padding:16px 20px;margin:12px 0;color:var(--accent);font-weight:500}
+/* 3. 서식 규칙 */
+.rl-item{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);padding:14px 18px;margin-bottom:8px;font-size:15px}
+@media (max-width:640px){.nw-hero h1{font-size:30px}.rv-h1{font-size:24px}}
 </style>""", unsafe_allow_html=True)
 
 
@@ -646,7 +740,6 @@ def conflict_box(district):
 
 
 # ---------------- 📝 보고서·자료 ----------------
-PANE_H = 640  # 보고서 화면 좌우 칸 높이(안에서 스크롤)
 
 
 def district_dept(district):
@@ -703,160 +796,291 @@ def company_form_box(form):
     return None
 
 
-def report_settings(district, facts):
-    """왼쪽 칸: 보고서 설정. 반환: 설정 값 묶음"""
-    form = st.selectbox('문서 양식', list(A04.FORMS), key='rp_form',
-                        help='회사 권장양식(보고서 작성 가이드라인)에 맞춘 글꼴·제목 띠·기호 단계·간격으로 만듭니다.')
-    st.caption(A04.FORM_HELP[A04.FORMS[form][0]])
-    form_path = company_form_box(form)
-    press = A04.FORMS[form][0] == 'press'
-    preset = draft.REPORT  # 보고서 종류는 현안 보고자료 하나
-    st.markdown(f'<div class="dg-q">보고서 종류</div><div class="dg-skill">📝 현안 보고자료'
-                '<small>사업개요 → 추진경위 → 주요 현안 및 대응방안 → 향후 계획 순서. 목차는 아래에서 켜고 끌 수 있습니다.</small></div>',
-                unsafe_allow_html=True)
+
+
+
+
+# ---------------- 📝 새 보고서 → 내 보고서 (새 디자인 시안: 자료 올리기 → 초안 검토 → 한글 파일로 저장) ----------------
+EXT = {'.hwpx': 'HWPX', '.docx': 'DOCX', '.pdf': 'PDF', '.txt': 'TXT', '.xlsx': 'XLSX'}
+STEPS3 = ['자료 올리기', '초안 검토', '한글 파일로 저장']
+
+
+def steps3(cur):
+    return '<ol class="nw-steps">' + ''.join(f'<li class="{"on" if i == cur else ""}">{s}</li>' for i, s in enumerate(STEPS3)) + '</ol>'
+
+
+def parse_kdate(s):
+    """보고 날짜 입력: ’26. 5. 28. / 2026-05-28 / 2026.5.28 → date (모르면 None)"""
+    m = re.search(r"(?:(20)|[’'‘`])?(\d{2})[.\-/년\s]+(\d{1,2})[.\-/월\s]+(\d{1,2})", s or '')
+    if not m:
+        return None
+    try:
+        return datetime(int(f'20{m.group(2)}'), int(m.group(3)), int(m.group(4)))
+    except ValueError:
+        return None
+
+
+def report_options(district, facts):
+    """세부 설정(접힘): 대상 사업·목차·작성 부서·직접 입력·AI 문장 다듬기·근거 표시. 반환: 값 묶음"""
+    preset = draft.REPORT
     tail, defaults = A04.PRESETS[preset]
-    title = st.text_input('제목', f'{district} {tail}', key=f'rp_title_{preset}_{district}')
-    dept = st.text_input('작성 부서', district_dept(district), key=f'rp_dept_{district}',
-                         help='이 지구 문서에 가장 많이 나온 작성 부서를 미리 채웁니다. 다르면 고쳐 쓰세요.')
-    facs = list(dict.fromkeys(f['facility'] for f in facts if f['facility'] != catalog.DISTRICT_FAC))
-    pick_facs = st.multiselect('대상 사업', facs, default=facs, key=f'rp_facs_{district}')
-    show_basis = st.checkbox('근거 표시(검토용)', value=False, key='rp_basis',
-                             help='켜면 값마다 근거 문서·문서ID·판정 설명을 붙입니다. 보고용은 끈 상태로 쓰세요.')
-
-    st.markdown('<div class="dg-q">목차</div>', unsafe_allow_html=True)
-    cols = st.columns(2)
-    chosen = []
-    for i, sec in enumerate(A04.SECTIONS):
-        ai = sec == '종합 의견(AI)'
-        on = cols[i % 2].checkbox(sec, value=sec in defaults and not (ai and not HAS_LLM), key=f'rp_{preset}_{sec}',
-                                  help=A04.SECTION_HELP[sec] + ('' if not ai or HAS_LLM else ' — API 키가 없어 사용할 수 없음'),
-                                  disabled=ai and not HAS_LLM or press)
-        if on:
-            chosen.append(sec)
-    extra = {}
-    hints = {'주요 현안': '(사업비) 철도 사업비 증액분 분담 협의 필요\n⇒ (대응방안) 관계기관 협의 착수',
-             '향후 계획': '(협의) 제21차 실무협의체에서 개통 목표 재확인\n- 11월 중 개최 예정'}
-    for sec in ('주요 현안', '향후 계획'):
-        if sec in chosen and not press:
-            extra[sec] = st.text_area(f'{sec} 직접 입력 (선택)', key=f'rp_extra_{sec}', height=90,
-                                      placeholder=f'한 줄에 하나. "(핵심어) 내용", "- 세부", "⇒ 조치"\n예)\n{hints[sec]}',
-                                      help='자동으로 만든 문장 뒤에 덧붙습니다. 문서에 없는 계획·현안을 담당자가 적는 칸입니다.')
-
-    sk = A04.skill.load()  # 보고서 작성 스킬: 초안을 만들 때 자동 적용
-    st.markdown(f'<div class="dg-q">적용 스킬</div><div class="dg-skill">🧩 {esc(sk["title"])} v{sk["version"]}'
-                '<small>표 간격·글자 크기·문장 규칙을 초안에 자동으로 적용합니다</small></div>', unsafe_allow_html=True)
-    use_polish = st.toggle('AI 문장 다듬기', value=HAS_LLM, disabled=not HAS_LLM or press, key='rp_polish',
-                           help='스킬의 문장 규칙(개조식·2줄 이내·과장 금지 등)대로 AI가 문장을 고칩니다. '
-                                '숫자나 "확인 필요" 표시가 바뀐 줄은 원래 문장을 씁니다.'
-                                + ('' if HAS_LLM else ' — API 키가 없어 사용할 수 없음'))
-    with st.expander('스킬 내용 보기'):
-        for line_ in A04.skill.summary():
-            st.caption('· ' + line_)
-        st.markdown(sk['text'])
-        st.caption(f"파일: {sk['path'].relative_to(BASE.resolve()).as_posix() if sk['found'] else '없음(기본값 사용)'} · "
-                   '이 파일을 고치면 다음 초안부터 반영됩니다.')
-    return dict(form=form, form_path=form_path, press=press, preset=preset, title=title, dept=dept, pick_facs=pick_facs,
-                show_basis=show_basis, chosen=chosen, extra=extra, use_polish=use_polish)
+    with st.expander('세부 설정 — 대상 사업·목차·작성 부서·직접 입력'):
+        dept = st.text_input('작성 부서', district_dept(district), key=f'rp_dept_{district}',
+                             help='이 지구 문서에 가장 많이 나온 작성 부서를 미리 채웁니다. 다르면 고쳐 쓰세요.')
+        facs = list(dict.fromkeys(f['facility'] for f in facts if f['facility'] != catalog.DISTRICT_FAC))
+        pick_facs = st.multiselect('대상 사업', facs, default=facs, key=f'rp_facs_{district}_{len(facs)}')
+        st.markdown('<div class="dg-q">목차</div>', unsafe_allow_html=True)
+        cols = st.columns(3)
+        chosen = []
+        for i, sec in enumerate(A04.SECTIONS):
+            ai = sec == '종합 의견(AI)'
+            if cols[i % 3].checkbox(sec, value=sec in defaults and not (ai and not HAS_LLM), key=f'rp_{preset}_{sec}',
+                                    help=A04.SECTION_HELP[sec], disabled=ai and not HAS_LLM):
+                chosen.append(sec)
+        extra = {}
+        for sec in ('주요 현안', '향후 계획'):
+            if sec in chosen:
+                extra[sec] = st.text_area(f'{sec} 직접 입력 (선택)', key=f'rp_extra_{sec}', height=80,
+                                          placeholder='한 줄에 하나. "(핵심어) 내용", "- 세부", "⇒ 조치"',
+                                          help='자동으로 만든 문장 뒤에 덧붙습니다. 문서에 없는 계획·현안을 담당자가 적는 칸입니다.')
+        c1, c2 = st.columns(2)
+        use_polish = c1.toggle('AI 문장 다듬기(서식 규칙 적용)', value=HAS_LLM, disabled=not HAS_LLM, key='rp_polish',
+                               help='서식 규칙(담당자 원칙·문장 규칙)대로 AI가 문장을 고칩니다. 숫자·"확인 필요"가 바뀐 줄은 원래 문장을 씁니다.')
+        show_basis = c2.toggle('근거 표시(검토용)', value=False, key='rp_basis')
+    return dict(preset=preset, dept=dept, pick_facs=pick_facs, chosen=chosen, extra=extra,
+                use_polish=use_polish, show_basis=show_basis)
 
 
-def make_report(district, facts, o):
-    chosen = o['chosen'] or list(A04.SECTIONS[:-1])
-    # A03: 목적(보고 유형) + 대상 사업 → 자료표(출처·기준일·부족·미확정 표시)
-    res3 = A03.run(facts, o['preset'], facilities=o['pick_facs'] + [catalog.DISTRICT_FAC], use_llm=HAS_LLM, cfg=cfg)
-    evs = db.events(con, district)  # 추진경위·향후 일정(날짜별 여러 줄)
+def make_report(district, o):
+    """DB의 그 지구 값으로 현안 보고자료 초안을 만들어 세션에 둔다(A03 → A04 → 서식 규칙 AI 다듬기 → 자동 점검)."""
+    facts = ordered(db.facts(con, district=district))
+    chosen = o['chosen'] or list(A04.PRESETS[o['preset']][1])
+    pick = o['pick_facs'] or [f['facility'] for f in facts if f['facility'] != catalog.DISTRICT_FAC]
+    res3 = A03.run(facts, o['preset'], facilities=list(dict.fromkeys(pick)) + [catalog.DISTRICT_FAC], use_llm=HAS_LLM, cfg=cfg)
+    evs = db.events(con, district)
     cands = db.load_candidates(con, district)
-    # A04: 자료표 + 양식 → 보고서 초안 → 스킬 문장 규칙으로 AI 다듬기 → 자동 점검
     blocks = A04.run(res3, cands, db.sources(con, district), db.choices(con, district),
                      o['title'], district, o['dept'], chosen, o['extra'], HAS_LLM, cfg, order=catalog.order(CAT, district),
-                     kinds=KINDS, show_basis=o['show_basis'], events=evs)
+                     kinds=KINDS, show_basis=o['show_basis'], events=evs, report_date=o.get('date'))
     pol = None
-    if o['use_polish'] and not o['press']:
+    if o['use_polish']:
         blocks, pol = A04.polish(blocks, cfg)
-    st.session_state['report'] = {'blocks': blocks, 'a03': res3, 'sections': chosen, 'district': district,
-                                  'checks': A04.check(blocks, res3, cands, chosen if not o['press'] else [], evs),
+    st.session_state['report'] = {'blocks': blocks, 'a03': res3, 'sections': chosen, 'district': district, 'opts': o,
+                                  'dept': o['dept'], 'checks': A04.check(blocks, res3, cands, chosen, evs),
                                   'polish': pol, 'stamp': datetime.now().strftime('%Y%m%d_%H%M%S')}
 
 
-def report_checks(rep):
-    ok = all(c['결과'] == '통과' for c in rep['checks'])
-    pol = rep.get('polish')
-    with st.expander(f"{'✅' if ok else '⚠️'} A04 자동 점검 — {'모두 통과' if ok else '확인할 항목이 있습니다'}"
-                     + (f" · AI가 {len(pol['changed'])}줄 다듬음" if pol and not pol['error'] else ''), expanded=not ok):
-        if pol:
-            if pol['error']:
-                st.markdown(f"⚠️ **AI 문장 다듬기** · 실패해서 자동 작성 문장을 그대로 썼습니다: {esc(pol['error'][:200])}")
-            else:
-                st.markdown(f"🧩 **AI 문장 다듬기** ({esc(pol['skill'])}) · {pol['total']}줄 중 **{len(pol['changed'])}줄 고침**"
-                            + (f", {len(pol['kept'])}줄은 검사에 걸려 원래 문장 유지" if pol['kept'] else '')
-                            + f" · {pol['seconds']}초")
-        for c in rep['checks']:
-            st.markdown(f"{'✅' if c['결과'] == '통과' else '⚠️'} **{c['점검']}** · {esc(c['설명'])}")
-        st.caption('내려받기 전에 담당자가 최종 검토하세요.')
-    if pol and (pol['changed'] or pol['kept']):
-        with st.expander(f"🧩 AI가 고친 문장 보기 ({len(pol['changed'])}줄)"):
-            for old, new in pol['changed']:
-                st.markdown(f"- 전: {esc(old)}  \n  **후: {esc(new)}**")
-            for old, why in pol['kept']:
-                st.markdown(f"- {esc(old)}  \n  ↺ 원래 문장 유지({esc(why)})")
+def load_files_to_db(files, district):
+    """올린 파일 → A01 값 추출(키 있으면 AI) → A02 판정·DB 적재. 반환: {파일 이름: (값 수, 오류)}"""
+    metas = A01.describe([p for p, _ in files], db.next_doc_num(con), CAT)
+    for m in metas:
+        m['doc_id'] = db.doc_id_for_file(con, m['file']) or m['doc_id']
+        m['district'] = district
+    res = A01.run(metas, catalog.items_for(CAT, district), use_llm=HAS_LLM, cfg=cfg)
+    A02.run(con, [r for r in res if not r[2]], CAT['default'])
+    return {d['file']: (len(c), e) for d, c, e in res}
 
 
-def page_report():
-    if not db.facts(con):
-        st.info('먼저 💾 DB 화면에서 샘플을 불러오거나 문서를 올리세요.')
-        return
-    left, right = st.columns([1, 1.15], gap='medium')
+def file_list(files, status):
+    rows = []
+    for p, kind in files:
+        name = Path(p).name
+        st_ = status.get(name)
+        if st_ is None:
+            badge = '<span class="wait">올림</span>'
+        elif st_[1]:
+            badge = '<span class="bad">읽기 실패</span>'
+        else:
+            badge = f'<span class="ok">분석 완료 · 값 {st_[0]}개</span>'
+        rows.append(f'<li class="nw-file"><span class="ext">{EXT.get(Path(p).suffix.lower(), "FILE")}</span>'
+                    f'<span class="info"><span class="name">{esc(name)}</span><span class="meta">{esc(kind)}</span></span>{badge}</li>')
+    st.markdown('<ul class="nw-files">' + ''.join(rows) + '</ul>', unsafe_allow_html=True)
 
-    with left.container(border=True, key='card_pane_set'):  # 왼쪽: 설정 → 초안 만들기
-        st.markdown('<div class="dg-pane-h">📝 새로 작성할 보고서의 설정을 입력하세요.</div>', unsafe_allow_html=True)
-        with st.container(height=PANE_H, border=False):
-            district = district_picker()
-            facts = ordered(db.facts(con, district=district))
-            o = report_settings(district, facts)
-        if not o['chosen'] and not o['press']:
-            st.warning('목차를 하나 이상 체크하세요.')
-        go = st.button('보도자료 초안 만들기' if o['press'] else '초안 만들기', type='primary', width='stretch',
-                       disabled=(not o['chosen'] and not o['press']) or not o['pick_facs'])
 
-    with right.container(border=True, key='card_pane_view'):  # 오른쪽: 미리보기 → 내려받기
-        st.markdown('<div class="dg-pane-h">📄 보고서 미리보기</div>', unsafe_allow_html=True)
-        body = st.container(height=PANE_H, border=False)
-        if go:
-            with body, st.spinner('보고서 초안을 쓰는 중…' + (' AI가 스킬 규칙으로 문장을 다듬고 있습니다(10~30초).'
-                                                          if o['use_polish'] and not o['press'] else '')):
-                make_report(district, facts, o)
-        rep = st.session_state.get('report')
-        if not rep or rep.get('district') != district:
-            body.markdown('<div class="dg-empty"><div class="ico"></div><div>간략한 설정을 입력 후<br>'
-                          '<b>초안 만들기</b>를 누르세요!<small>숫자는 모두 DB의 최신값에서 가져옵니다.</small></div></div>',
-                          unsafe_allow_html=True)
-            st.button('내려받기는 초안을 만든 뒤에 할 수 있습니다', disabled=True, width='stretch', key='rp_dl_none')
+def page_new():
+    """1. 새 보고서: 자료 올리기 → 보고서 설정 → 초안 만들기(지구 자동 판단·값 추출·DB 적재·초안)"""
+    st.markdown('<div class="nw-hero">' + steps3(0) + '<h1>자료만 올리세요.<br>보고서는 규칙대로 쓸게요.</h1>'
+                '<p>LH 개조식 규칙에 맞춘 초안과 서식 점검 결과를 한 번에 보여 드려요.</p></div>', unsafe_allow_html=True)
+    with st.container(key='nw_drop'):
+        ups = st.file_uploader('파일을 끌어다 놓으세요',
+                               help='한글(hwpx), 워드, PDF, 텍스트 · 여러 개 한 번에 가능. 사업지구는 올린 자료로 자동으로 정해요.',
+                               type=['hwpx', 'docx', 'pdf', 'txt', 'xlsx'], accept_multiple_files=True, key='nw_files')
+    folder = UPLOADS / 'new'
+    files = []
+    for f in ups or []:
+        folder.mkdir(parents=True, exist_ok=True)
+        p = folder / f.name
+        if not p.exists() or p.stat().st_size != f.size:
+            p.write_bytes(f.getvalue())
+        files.append((str(p), K.guess_kind(f.name)))
+    if not files and INTAKE_SAMPLE.exists():
+        c1, _ = st.columns([2, 3])
+        if c1.button('📁 모의 자료로 해 보기 (누리마루지구 · 문서 5건)', key='nw_sample'):
+            st.session_state['nw_sample_on'] = True
+        if st.session_state.get('nw_sample_on'):
+            files = [(str(p), k) for p in sorted(INTAKE_SAMPLE.iterdir()) if (k := K.guess_kind(p.name)) in INTAKE_KINDS]
+    status = st.session_state.setdefault('nw_status', {})
+    if files:
+        file_list(files, status)
+
+    # 사업지구: 올린 문서로 자동(파일명·본문 → 못 찾으면 AI). 없으면 DB에 있는 지구에서 고름
+    names = list(dict.fromkeys((district_options() if db.facts(con) else []) + CAT['districts']))
+    det = None
+    if files:
+        det, fsig = ik_detect(files)
+        if det and not det['known']:
+            ik_register_box(det)
             return
-        res3 = rep['a03']
-        lay = A04.Layout(rep['blocks'], o['form'], res3['facts'], district, o['dept'], KINDS, form_path=o['form_path'])
-        safe = re.sub(r'[\\/:*?"<>|]', '_', lay.title)
-        with body:
-            st.caption(f"A03 자료표 {len(res3['table'])}행({res3['basis']}) → A04 초안 · 양식: {o['form']} · 목차: "
-                       f"{' · '.join(rep['sections']) if lay.kind != 'press' else '보도자료 구성'}")
-            if res3['lacking']:
-                st.warning(f"부족·미확정 {len(res3['lacking'])}건이 '확인 필요'로 들어갔습니다. 💾 DB 화면의 값 충돌에서 확정한 뒤 다시 만들면 반영됩니다.")
-            report_checks(rep)
+        if det and st.session_state.get('nw_det_sig') != fsig:
+            st.session_state['nw_det_sig'] = fsig
+            st.session_state['nw_district'] = det['known']
+    if st.session_state.get('nw_district') not in names:
+        st.session_state['nw_district'] = CAT['default'] if CAT['default'] in names else names[0]
+
+    with st.container(border=True, key='card_settings'):
+        st.markdown('<div class="nw-h2">보고서 설정</div>', unsafe_allow_html=True)
+        c0, c1, c2, c3 = st.columns([1.1, 1.1, 2.2, 1])
+        district = c0.selectbox('사업지구', names, key='nw_district',
+                                help='올린 문서로 자동으로 고릅니다. 자료를 올리지 않으면 DB에 이미 있는 그 지구 값으로 만듭니다.')
+        c1.selectbox('종류', ['현안 보고'], key='nw_kind', help='지금은 현안 보고자료 하나만 만듭니다.')
+        tail = A04.PRESETS[draft.REPORT][0]
+        title = c2.text_input('제목', f'{district} {tail}', key=f'nw_title_{district}')
+        dtxt = c3.text_input('보고 날짜', lh_style_date(datetime.now()), key='nw_date')
+        mismatch = det and det['known'] != district
+        if det:
+            st.markdown(f"<div class='nw-dist{' bad' if mismatch else ''}'>🔎 올린 자료의 사업지구: <b>{esc(det['known'])}</b>"
+                        + (f' — 고른 지구({esc(district)})와 다릅니다. 이대로는 초안을 만들지 않습니다.' if mismatch else ' ✓')
+                        + f"<small>근거: {esc(det['evidence'])}</small></div>", unsafe_allow_html=True)
+        facts = db.facts(con, district=district)
+        o = report_options(district, facts)
+        st.markdown('<p class="nw-hint">꼭지 두 줄 이내 · 개조식 끝맺음 · 표 11pt 이상 · 자료에 없는 숫자는 “확인 필요” · '
+                    '서식 규칙은 위 메뉴 “서식 규칙”에서 볼 수 있어요</p>', unsafe_allow_html=True)
+    show_flash()
+    ready = bool(files) or bool(facts)
+    _, cgo = st.columns([3, 1])
+    with cgo.container(key='nw_go'):
+        go = st.button('초안 만들기  →', type='primary', width='stretch', disabled=not ready or bool(mismatch),
+                       help=None if ready else '자료를 올리거나, DB에 값이 있는 사업지구를 고르세요.')
+    if go:
+        o.update(title=title, date=parse_kdate(dtxt))
+        with st.spinner('자료를 읽고 값을 뽑아 DB에 넣은 뒤 초안을 쓰는 중…' + (' (AI 사용, 30초~1분)' if HAS_LLM else '')):
+            if files:
+                status.update(load_files_to_db(files, district))
+            if not db.facts(con, district=district):
+                st.error('자료에서 값을 하나도 찾지 못했습니다. 사업지구가 맞는지, 문서가 광역교통 자료인지 확인하세요.')
+                return
+            make_report(district, o)
+        st.session_state['goto'] = REVIEW
+        st.rerun()
+
+
+def lh_style_date(d):
+    return f"’{d:%y}. {d.month}. {d.day}."
+
+
+def page_review():
+    """2. 내 보고서(초안 검토): 근거 자료 | 보고서 미리보기 | 서식 점검 + 확인 필요 → 한글(hwpx)로 저장"""
+    rep = st.session_state.get('report')
+    if not rep:
+        st.markdown('<div class="nw-hero">' + steps3(1) + '<h1>아직 만든 보고서가 없어요.</h1>'
+                    '<p>새 보고서에서 자료를 올리고 초안을 만들어 주세요.</p></div>', unsafe_allow_html=True)
+        if st.button('새 보고서 만들기  →', type='primary'):
+            st.session_state['goto'] = NEW
+            st.rerun()
+        return
+    district, res3, o = rep['district'], rep['a03'], rep['opts']
+    head = st.container()
+    left, mid, right = st.columns([1, 2.7, 1.25], gap='medium')
+
+    # 오른쪽: 서식 점검 · 확인 필요 · 양식
+    with right:
+        checks = rep['checks']
+        n_ok = sum(c['결과'] == '통과' for c in checks)
+        with st.container(border=True, key='card_checks'):
+            st.markdown(f'<div class="rv-panel-head"><h2>서식 점검</h2><span class="score">{n_ok} / {len(checks)} 통과</span></div>'
+                        '<ul class="rv-checks">' + ''.join(
+                            f'<li><span class="rv-dot{"" if c["결과"] == "통과" else " warn"}">{"✓" if c["결과"] == "통과" else "!"}</span>'
+                            f'<span><span class="t">{esc(c["점검"])}</span><span class="d">{esc(c["설명"])}</span></span></li>'
+                            for c in checks) + '</ul>', unsafe_allow_html=True)
+        lack = res3['lacking']
+        warn = [c for c in checks if c['결과'] != '통과']
+        if lack or warn:
+            items = [f"{f['facility']} {f['item']}" for f in lack[:4]]
+            st.markdown(f'<div class="rv-notice"><strong>확인이 필요한 곳 {len(lack) + len(warn)}건</strong><span>'
+                        + (f"문서끼리 값이 다르거나 비어 있는 항목({esc(', '.join(items))}{' 등' if len(lack) > 4 else ''})은 "
+                           '“확인 필요”로 표시했어요. 자료 DB › 값 충돌에서 고르면 다시 만들 때 반영돼요. ' if lack else '')
+                        + ' '.join(esc(c['점검'] + ': ' + c['설명']) for c in warn) + '</span></div>', unsafe_allow_html=True)
+        else:
+            st.markdown('<div class="rv-ok">확인이 필요한 곳이 없어요.</div>', unsafe_allow_html=True)
+        pol = rep.get('polish')
+        if pol and not pol['error'] and (pol['changed'] or pol['kept']):
+            with st.expander(f"AI가 서식 규칙대로 고친 문장 {len(pol['changed'])}줄"):
+                for old, new in pol['changed']:
+                    st.markdown(f"- 전: {esc(old)}  \n  **후: {esc(new)}**")
+                for old, why in pol['kept']:
+                    st.markdown(f"- {esc(old)}  \n  ↺ 원래 문장 유지({esc(why)})")
+        elif pol and pol['error']:
+            st.caption(f"AI 문장 다듬기 실패 → 자동 작성 문장 그대로: {pol['error'][:120]}")
+        with st.container(border=True, key='card_form'):
+            form = st.selectbox('한글 문서 양식', [f for f in A04.FORMS if A04.FORMS[f][0] != 'press'], key='rp_form',
+                                help='회사 권장양식(보고서 작성 가이드라인)의 글꼴·제목 띠·기호 단계·간격으로 만듭니다.')
+            form_path = company_form_box(form)
+
+    lay = A04.Layout(rep['blocks'], form, res3['facts'], district, rep['dept'], KINDS, form_path=form_path)
+    safe = re.sub(r'[\\/:*?"<>|]', '_', lay.title)
+
+    # 머리: 제목 + 다시 만들기 / 한글(hwpx)로 저장
+    with head:
+        h1, h2 = st.columns([2.2, 2.4], vertical_alignment='bottom')
+        h1.markdown(steps3(1) + f'<div class="rv-kicker" style="margin-top:10px">초안 검토 · {esc(district)}</div>'
+                    f'<div class="rv-h1">{esc(lay.title)}</div>', unsafe_allow_html=True)
+        b1, b2, b3 = h2.columns([1, 1.5, 1])
+        if b1.button('다시 만들기', width='stretch', help='DB의 최신 값으로 같은 설정의 초안을 다시 만듭니다.'):
+            with st.spinner('초안을 다시 쓰는 중…'):
+                make_report(district, o)
+            st.rerun()
+        hw = lay.hwpx()
+        if b2.download_button('한글(hwpx)로 저장', hw, file_name=f"{safe}_{rep['stamp']}.hwpx", mime='application/octet-stream',
+                              type='primary', width='stretch'):
+            (db.OUTPUT / f"{safe}_{rep['stamp']}.hwpx").write_bytes(hw)
+        b3.download_button('워드(docx)', lay.docx(), file_name=f"{safe}_{rep['stamp']}.docx", width='stretch',
+                           mime='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+
+    # 왼쪽: 근거 자료(값을 가져온 문서와 쓰인 횟수)
+    with left:
+        srcs = {s['doc_id']: s for s in db.sources(con, district)}
+        use = {}
+        for f in res3['facts']:
+            if f['source_doc'] and f['value'] is not None:
+                use[f['source_doc']] = use.get(f['source_doc'], 0) + 1
+        st.markdown('<div class="rv-h2">근거 자료</div>' + ''.join(
+            f'<div class="rv-src{" main" if i == 0 else ""}"><span class="n">{esc(srcs.get(d, {}).get("file", d))}</span>'
+            f'<span class="u">값 {n}개에 사용 · {esc(srcs.get(d, {}).get("stage", ""))}</span></div>'
+            for i, (d, n) in enumerate(sorted(use.items(), key=lambda x: -x[1]))) +
+            '<p class="nw-hint">초안의 숫자는 모두 이 자료에서 가져왔어요. 값마다 근거는 아래 자료표(엑셀)에 있어요.</p>',
+            unsafe_allow_html=True)
+        st.download_button('자료표(xlsx)', A03.to_excel(res3, lay.title, db.sources(con, district)), width='stretch',
+                           file_name=f"자료표_{rep['stamp']}.xlsx",
+                           mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+    # 가운데: 보고서 미리보기
+    with mid:
+        with st.container(key='rv_doc'):
             st.markdown(lay.html(), unsafe_allow_html=True)
-            if lay.styled:
-                st.caption('한글(hwpx)은 회사 양식 서식 파일에 그대로 채워 만들고, 워드는 같은 규칙(글꼴·제목 띠·기호 단계·간격)으로 만듭니다.'
-                           if lay.use_form else '워드 파일에 회사 양식을 적용합니다. 이 양식의 한글 서식 파일이 없어 한글본은 기본 서식입니다 — 왼쪽 "🏢 회사 한글 양식 올리기"에서 양식을 올리면 회사 양식 그대로 나옵니다.')
-            with st.expander(f"A03 자료표 (표로 보기, {len(res3['table'])}행)"):
-                st.dataframe(pd.DataFrame(res3['table']), hide_index=True, width='stretch')
-        d1, d2, d3 = st.columns(3)
-        files = [('한글(.hwpx)', f"{safe}_{rep['stamp']}.hwpx", lay.hwpx, 'application/octet-stream', d1),
-                 ('워드(.docx)', f"{safe}_{rep['stamp']}.docx", lay.docx,
-                  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', d2),
-                 ('자료표(.xlsx)', f"자료표_{rep['stamp']}.xlsx",
-                  lambda: A03.to_excel(res3, lay.title, db.sources(con, district)),
-                  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', d3)]
-        for label, name, make, mime, col in files:
-            data = make()
-            if col.download_button(label, data, file_name=name, mime=mime, width='stretch', icon=':material/download:'):
-                (db.OUTPUT / name).write_bytes(data)
+        st.caption('한글(hwpx)은 회사 양식 서식 파일에 그대로 채워 만들어요.' if lay.use_form else
+                   '이 양식의 회사 한글 서식이 없어 한글본은 기본 서식이에요 — 오른쪽 "회사 한글 양식 올리기"에서 올리면 회사 양식 그대로 나와요.')
+
+
+def page_rules():
+    """3. 서식 규칙: 보고서 작성 스킬(담당자 원칙·문장 규칙·표·본문 서식)"""
+    sk = A04.skill.load()
+    st.markdown('<div class="nw-hero"><h1 style="font-size:32px">서식 규칙</h1>'
+                f'<p>초안을 만들 때 자동으로 적용하는 규칙이에요. ({esc(sk["title"])} v{sk["version"]})</p></div>', unsafe_allow_html=True)
+    st.markdown(''.join(f'<div class="rl-item">{esc(x)}</div>' for x in A04.skill.summary()), unsafe_allow_html=True)
+    with st.container(border=True, key='card_rules'):
+        st.markdown(sk['text'])
+    st.caption(f"파일: {sk['path'].relative_to(BASE.resolve()).as_posix() if sk['found'] else '없음(기본값 사용)'} · "
+               '이 파일을 고치면 다음 초안부터 반영돼요.')
 
 
 # ---------------- 📥 자료 적재 (1 자료 올리기 → 2 AI 추출·분류 → 3 사람 확인 → 4 DB 적재) ----------------
@@ -1362,54 +1586,6 @@ def page_compare():
 
 
 # ---------------- 🏠 처음 ----------------
-def page_home():
-    """첫 화면: 할 일 고르기(자료 올리기 / 보고서 작성) + DB에 있는 사업지구."""
-    facts = db.facts(con)
-    st.markdown('<div class="hm-logo">디딤돌</div><div class="hm-sub">사업지구 문서를 모아 최신값 DB를 만들고, 그 값으로 보고서 초안을 씁니다</div>',
-                unsafe_allow_html=True)
-    _, mid, _ = st.columns([1, 4, 1])
-    with mid:
-        st.markdown('<div class="hm-sec">무엇을 할까요?</div>', unsafe_allow_html=True)
-        a, b = st.columns(2)
-        for col, (ico, title, desc, target, ok) in zip((a, b), (
-                ('📥', '자료 올리기', '문서를 올려 교통대책별로 나누고 DB에 적재합니다', DOCS, True),
-                ('📝', '보고서 작성', 'DB 최신값으로 보고서 초안을 만듭니다' if facts else '자료를 먼저 올려야 쓸 수 있어요', REPORT, bool(facts)))):
-            with card(col):
-                st.markdown(f'<div class="hm-card"><div class="i">{ico}</div><div class="t">{title}</div>'
-                            f'<div class="d">{desc}</div></div>', unsafe_allow_html=True)
-                if st.button(f'{title} →', key=f'hm_{title}', width='stretch', type='primary' if target == DOCS else 'secondary',
-                             disabled=not ok):
-                    st.session_state['goto'] = target
-                    if target == DOCS:
-                        st.session_state['db_view'] = DB_VIEWS[0]
-                    st.rerun()
-
-        st.markdown('<div class="hm-sec">현재 DB에 있는 사업지구</div>', unsafe_allow_html=True)
-        if not facts:
-            st.caption('아직 없습니다. 📥 자료 올리기에서 문서를 올리세요.')
-            return home_footer()
-        names = district_options()
-        cols = st.columns(min(len(names), 3))
-        for i, d in enumerate(names):
-            fs = [f for f in facts if f['district'] == d]
-            n_proj = len({f['facility'] for f in fs})
-            n_conf = sum(f['status'] == '미확정(충돌)' for f in fs)
-            label = f"{'⚠ ' if n_conf else ''}{d} · 사업 {n_proj}"
-            if cols[i % len(cols)].button(label, key=f'hm_d_{d}', width='stretch',
-                                          help=f'{d} 자료 적재 화면으로' + (f' (값 충돌 {n_conf}건 확인 필요)' if n_conf else '')):
-                st.session_state['district'] = d
-                st.session_state['goto'] = DOCS
-                st.session_state['db_view'] = DB_VIEWS[0]
-                st.rerun()
-        home_footer()
-
-
-def home_footer():
-    lc = cfg.get('llm', {})
-    st.markdown('<div class="hm-sec"></div>', unsafe_allow_html=True)
-    st.caption(f"모델 {lc.get('model')} · " + ('AI 추출 사용' if HAS_LLM else '키 없음 → 샘플·간이 추출'),
-               help='모델 교체는 config.yaml의 provider·model·base_url·api_key_env를 바꾸면 됩니다. '
-                    '판정은 LLM 없이 규칙(resolver.py)만으로 합니다.')
 
 
 # ---------------- 💾 DB ----------------
@@ -1419,33 +1595,32 @@ def page_db():
     {DB_VIEWS[0]: page_intake, DB_VIEWS[1]: page_docs, DB_VIEWS[2]: page_compare}[view]()
 
 
-# ---------------- 화면 전환 (상단 메뉴: 디딤돌 · DB · 보고서 작성) ----------------
-PAGE_SUB = {DOCS: '현재 DB · 업로드한 문서에서 추출한 값이 적재됩니다',
-            REPORT: '설정을 고르면 DB 최신값으로 보고서 초안을 씁니다'}
+# ---------------- 화면 전환 (상단 바: 디딤돌 로고 · 새 보고서 · 내 보고서 · 자료 DB · 서식 규칙) ----------------
+LOGO = ('<svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><circle cx="7" cy="20" r="4" fill="#1f6f5c"/>'
+        '<circle cx="14" cy="14" r="4" fill="#1f6f5c" opacity="0.7"/><circle cx="21" cy="8" r="4" fill="#1f6f5c" opacity="0.4"/></svg>')
 
 
 def top_bar(page):
-    """흰 막대 + 아래 초록 줄: [디딤돌 로고] [DB | 보고서 작성] ……… [AI 연결 · 사용자]"""
-    st.session_state['top_nav'] = page if page != HOME else None
+    st.session_state['top_nav'] = page
     with st.container(key='topbar'):
-        c1, c2, c3 = st.columns([1.1, 3, 1.6], vertical_alignment='center')
-        if c1.button('디딤돌', key='tb_home', type='tertiary', help='처음 화면'):
-            st.session_state['goto'] = HOME
-            st.rerun()
-        c2.segmented_control('메뉴', NAV[1:], key='top_nav', label_visibility='collapsed',
-                             on_change=lambda: st.session_state.update(nav=st.session_state['top_nav'] or st.session_state['nav']))
-        lc = cfg.get('llm', {})
-        c3.markdown(f'<div class="tb-right"><span>{"AI " + esc(lc.get("model", "")) if HAS_LLM else "AI 키 없음"}</span>'
-                    f'<span class="dg-chip">👤 사용자 님</span></div>', unsafe_allow_html=True)
-    if page in PAGE_SUB:
-        st.markdown(f'<div class="tb-sub">{PAGE_SUB[page]} · 모든 자료는 가상(모의) 데이터입니다</div>', unsafe_allow_html=True)
+        c1, c2 = st.columns([1, 3], vertical_alignment='center')
+        with c1:
+            a, b = st.columns([0.18, 1], vertical_alignment='center')
+            a.markdown(LOGO, unsafe_allow_html=True)
+            if b.button('디딤돌', key='tb_home', type='tertiary', help='새 보고서'):
+                st.session_state['goto'] = NEW
+                st.rerun()
+        with c2:
+            _, nav = st.columns([0.5, 3])
+            nav.segmented_control('메뉴', NAV, key='top_nav', label_visibility='collapsed',
+                                  on_change=lambda: st.session_state.update(nav=st.session_state['top_nav'] or st.session_state['nav']))
 
 
 if 'goto' in st.session_state:
     st.session_state['nav'] = st.session_state.pop('goto')
 if st.session_state.get('nav') not in NAV:
-    st.session_state['nav'] = HOME
+    st.session_state['nav'] = NEW
 st.session_state.setdefault('db_view', DB_VIEWS[0])
 page = st.session_state['nav']
 top_bar(page)
-{HOME: page_home, DOCS: page_db, REPORT: page_report}[page]()
+{NEW: page_new, REVIEW: page_review, DOCS: page_db, RULES: page_rules}[page]()

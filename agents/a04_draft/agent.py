@@ -28,10 +28,10 @@ NUM_UNIT = re.compile(r'(?<![\d.])(\d[\d,]*(?:\.\d+)?)\s*(억원|km|차로|㎡)'
 
 
 def run(a03, cands, sources, choices, title='', district='', dept='', sections=None, extra=None,
-        use_llm=False, cfg=None, order=None, kinds=None, show_basis=False, events=None):
+        use_llm=False, cfg=None, order=None, kinds=None, show_basis=False, events=None, report_date=None):
     """①~③ A03 자료표(a03['facts'])로 보고서 블록(제목·□·ㅇ·- …)을 만든다. 반환: 블록 목록"""
     return draft.build(a03['facts'], cands, sources, choices, title, district, dept, sections, extra,
-                       use_llm, cfg, order=order, kinds=kinds, show_basis=show_basis, events=events)
+                       use_llm, cfg, order=order, kinds=kinds, show_basis=show_basis, events=events, report_date=report_date)
 
 
 def polish(blocks, cfg=None):

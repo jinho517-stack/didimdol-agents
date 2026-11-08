@@ -131,7 +131,7 @@ def _ev_date(d):
 
 
 def build(facts, cands, sources, choices, title='', district='', dept='', sections=None, extra=None,
-          use_llm=False, cfg=None, order=None, kinds=None, show_basis=False, events=None):
+          use_llm=False, cfg=None, order=None, kinds=None, show_basis=False, events=None, report_date=None):
     """sections: 넣을 목차 이름 목록(SECTIONS 순서로 배치). extra: {목차 이름: 직접 입력 텍스트}.
     order: [(시설, 항목), ...] 보고서에 쓸 순서(config.yaml items 순서). 없으면 이름순.
     kinds: {항목 이름: 'status'|'issue'|'plan'} 문장형 항목 구분(config.yaml items의 kind). 나머지는 값 항목.
@@ -145,7 +145,7 @@ def build(facts, cands, sources, choices, title='', district='', dept='', sectio
     events = [e for e in (events or []) if e['facility'] == DISTRICT_FAC or any(f['facility'] == e['facility'] for f in facts)]
     sections = [s for s in SECTIONS if s in (sections if sections is not None else PRESETS[REPORT][1])]
     extra = extra or {}
-    today = datetime.now()
+    today = report_date or datetime.now()  # 보고 날짜(화면에서 고름, 없으면 오늘)
     # 날짜 값 표기 통일: '30.12, ’30.12 → 2030.12 (같은 날짜가 표기만 달라 '변경'으로 잡히지 않게)
     facts = [dict(f, value=_nd(f['value'])) for f in facts]
     cands = [dict(c, value=_nd(c['value'])) for c in cands]

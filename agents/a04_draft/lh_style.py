@@ -57,16 +57,20 @@ def restyle(blocks, form):
     title = next((b[1] for b in blocks if b[0] == 'title'), '보고서')
     meta = next((b[1] for b in blocks if b[0] == 'meta'), {})
     dept = meta.get('dept') or '○○○○처'
+    try:  # 보고 날짜(초안 만들 때 고른 날짜)
+        rd = datetime.strptime(meta.get('date') or '', '%Y-%m-%d')
+    except ValueError:
+        rd = None
     summary = next((b[1] for b in blocks if b[0] == 'summary'), '')
     heads = [re.sub(r'^□\s*', '', b[1]) for b in blocks if b[0] == 'h']
     out = []
     if kind == 'cover':
-        out += [('cover', title, lh_date(short=False).rsplit('.', 2)[0] + '.', dept), ('pagebreak',),
+        out += [('cover', title, lh_date(rd, short=False).rsplit('.', 2)[0] + '.', dept), ('pagebreak',),
                 ('toc', heads), ('pagebreak',)]
     elif kind == 'onepage':
-        out.append(('head1p', title, dept, lh_date(short=False)))
+        out.append(('head1p', title, dept, lh_date(rd, short=False)))
     else:
-        out += [('title', title), ('dateline', f'({lh_date()}, {dept})')]
+        out += [('title', title), ('dateline', f'({lh_date(rd)}, {dept})')]
     if summary:
         out.append(('summary', summary))
     n = 0

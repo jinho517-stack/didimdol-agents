@@ -1,50 +1,28 @@
 [browser]
 gatherUsageStats = false
 
-# 디자인: 조원 시안(광역교통개선대책_DB_v0.3.html) 색·모양
-#   남색 #0B3A8A(주 색) · 연두 #7FC31B(강조) · 회색 #4D4D4D · 바탕 #eef3fa · 카드 흰색
+# 디자인: 새 시안(index.html·review.html·styles.css, 2026-11-08)
+#   바탕 #fbfbfa · 카드 흰색 · 글자 #1c1b19 · 포인트 초록 #1f6f5c · 주 버튼 검정 · 모서리 12~20px · Noto Sans KR
 [theme]
-font = "'Malgun Gothic', '맑은 고딕', sans-serif"
-headingFont = "'Malgun Gothic', '맑은 고딕', sans-serif"
-baseFontSize = 14
-baseRadius = "8px"
-buttonRadius = "8px"
-showWidgetBorder = false
-showSidebarBorder = true
-headingFontWeights = [800, 700, 700, 700, 600, 600]
-chartCategoricalColors = ["#0B3A8A", "#7FC31B", "#4D4D4D", "#5b8fe6", "#b45309", "#0f7a4a", "#86b6ef", "#b42318"]
-
-[theme.light]
-primaryColor = "#0B3A8A"
-backgroundColor = "#ffffff"
-secondaryBackgroundColor = "#eef3fa"
-textColor = "#14171c"
-borderColor = "#dfe3e9"
-linkColor = "#0B3A8A"
-greenColor = "#3d6b0a"
-greenBackgroundColor = "#e5f6ee"
+base = "light"
+font = "'Noto Sans KR', 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif"
+headingFont = "'Noto Sans KR', 'Malgun Gothic', sans-serif"
+baseFontSize = 15
+baseRadius = "12px"
+buttonRadius = "12px"
+showWidgetBorder = true
+headingFontWeights = [700, 700, 700, 700, 600, 600]
+primaryColor = "#1f6f5c"
+backgroundColor = "#fbfbfa"
+secondaryBackgroundColor = "#efeeea"
+textColor = "#1c1b19"
+borderColor = "#cfccc4"
+linkColor = "#1f6f5c"
+greenColor = "#1f6f5c"
+greenBackgroundColor = "#e8f3ef"
 orangeColor = "#b45309"
-orangeBackgroundColor = "#fff4e0"
+orangeBackgroundColor = "#fff6e5"
 redColor = "#b42318"
 redBackgroundColor = "#fdeceb"
-dataframeHeaderBackgroundColor = "#eef3fa"
-
-[theme.light.sidebar]
-backgroundColor = "#ffffff"
-secondaryBackgroundColor = "#eef3fa"
-
-[theme.dark]
-primaryColor = "#5b8fe6"
-backgroundColor = "#171c23"
-secondaryBackgroundColor = "#1c2330"
-textColor = "#eceff4"
-borderColor = "#2a313b"
-linkColor = "#5b8fe6"
-greenColor = "#b6ee6a"
-orangeColor = "#fbbf62"
-redColor = "#ff8a80"
-dataframeHeaderBackgroundColor = "#1c2330"
-
-[theme.dark.sidebar]
-backgroundColor = "#171c23"
-secondaryBackgroundColor = "#1c2330"
+dataframeHeaderBackgroundColor = "#efeeea"
+chartCategoricalColors = ["#1f6f5c", "#b45309", "#4a4740", "#6aa892", "#cfa25c", "#8a8578"]
