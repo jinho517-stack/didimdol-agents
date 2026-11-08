@@ -2,7 +2,7 @@
 
   python pipeline.py                         샘플 모드(A01 = 모의 문서의 추출 결과 예시, 키 없이)
   python pipeline.py --read                  A01이 sample/ 모의 문서를 직접 읽는다(키 있으면 AI, 없으면 규칙)
-  python pipeline.py --district 한빛지구 --preset "추진현황 보고"
+  python pipeline.py --district 한빛지구 --preset "현안사항 보고"
 
 결과 파일(output/pipeline/): a01_항목후보표.csv, didimdol.db, 자료표.xlsx, 보고서 초안 .hwpx/.docx
 담당자 선택이 필요한 충돌(A02 ⑥)은 화면(streamlit run app.py)에서 고른다. 여기서는 '미확정'으로 둔 채 진행한다."""

@@ -1,2 +1,50 @@
 [browser]
 gatherUsageStats = false
+
+# 디자인: 조원 시안(광역교통개선대책_DB_v0.3.html) 색·모양
+#   남색 #0B3A8A(주 색) · 연두 #7FC31B(강조) · 회색 #4D4D4D · 바탕 #eef3fa · 카드 흰색
+[theme]
+font = "'Malgun Gothic', '맑은 고딕', sans-serif"
+headingFont = "'Malgun Gothic', '맑은 고딕', sans-serif"
+baseFontSize = 14
+baseRadius = "8px"
+buttonRadius = "8px"
+showWidgetBorder = false
+showSidebarBorder = true
+headingFontWeights = [800, 700, 700, 700, 600, 600]
+chartCategoricalColors = ["#0B3A8A", "#7FC31B", "#4D4D4D", "#5b8fe6", "#b45309", "#0f7a4a", "#86b6ef", "#b42318"]
+
+[theme.light]
+primaryColor = "#0B3A8A"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#eef3fa"
+textColor = "#14171c"
+borderColor = "#dfe3e9"
+linkColor = "#0B3A8A"
+greenColor = "#3d6b0a"
+greenBackgroundColor = "#e5f6ee"
+orangeColor = "#b45309"
+orangeBackgroundColor = "#fff4e0"
+redColor = "#b42318"
+redBackgroundColor = "#fdeceb"
+dataframeHeaderBackgroundColor = "#eef3fa"
+
+[theme.light.sidebar]
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#eef3fa"
+
+[theme.dark]
+primaryColor = "#5b8fe6"
+backgroundColor = "#171c23"
+secondaryBackgroundColor = "#1c2330"
+textColor = "#eceff4"
+borderColor = "#2a313b"
+linkColor = "#5b8fe6"
+greenColor = "#b6ee6a"
+orangeColor = "#fbbf62"
+redColor = "#ff8a80"
+dataframeHeaderBackgroundColor = "#1c2330"
+
+[theme.dark.sidebar]
+backgroundColor = "#171c23"
+secondaryBackgroundColor = "#1c2330"

@@ -7,7 +7,7 @@ import re
 from common import catalog, llm
 from common.fmt import fmt_value
 
-TYPES = ['도로', '철도', '환승', '대중교통']
+TYPES = ['도로', '철도', '환승', '대중교통', '접속시설']  # 환승 = 환승시설
 ENTITY = ['지자체(기초)', '지자체(광역)', 'LH(사업시행자)', '국가·공공기관', '기타', '미정']
 KEYWORDS = ['반대', '지연', '증액', '보상', '예타', '재조사', '소음', '민원', '이견', '중재', '설계', '착공', '부지',
             '교육청', '학교용지', '분담', '대안노선', '조건부', '주민']
@@ -25,7 +25,8 @@ def projects(facts, cat):
     """facts(항목 단위) → 사업 단위 행 목록."""
     by = {}
     for f in facts:
-        by.setdefault((f['district'], f['facility']), {})[f['item']] = f
+        if f['facility'] != catalog.DISTRICT_FAC:  # 지구 공통 값은 사업 행이 아님
+            by.setdefault((f['district'], f['facility']), {})[f['item']] = f
     out = []
     for (district, fac), m in by.items():
         def v(item):

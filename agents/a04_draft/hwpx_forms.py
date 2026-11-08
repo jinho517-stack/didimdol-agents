@@ -11,6 +11,7 @@ from pathlib import Path
 from xml.sax.saxutils import escape
 
 from agents.a04_draft import lh_style
+from agents.a04_draft import skill as SK
 
 DIR = Path(__file__).resolve().parents[2] / 'templates' / 'company'
 FILES = {  # 양식 이름 → 파일 이름 앞부분
@@ -117,22 +118,34 @@ class Form:
         self._clones[key] = str(new_id)
         return str(new_id)
 
-    def tight_char(self, char_id, height=None):
-        """표 글자: 자간 -8%, 장평 98%(가이드라인 허용 범위). height를 주면 글자 크기도 바꾼다(1300 = 13pt)."""
+    def align_right(self, para_id):
+        """표를 담은 문단을 오른쪽 정렬로(표 본체를 오른쪽 끝에 맞춤, 담당자 원칙)."""
+        def right(x):
+            return re.sub(r'(<hh:align [^>]*?horizontal=")\w+', r'\g<1>RIGHT', x, count=1)
+        return self._clone('paraPr', 'paraProperties', para_id, right)
+
+    def tight_char(self, char_id, height=None, spacing=None):
+        """표 글자: 자간·장평은 보고서 작성 스킬 값(기본 0%, 100%). height를 주면 글자 크기도(1300 = 13pt),
+        spacing을 주면 그 자간으로(넘치는 칸만 -6%)."""
+        sp, ra = SK.get('table', 'char_spacing') if spacing is None else spacing, SK.get('table', 'char_ratio')
+        langs = ('hangul', 'latin', 'hanja', 'japanese', 'other', 'symbol', 'user')
+
         def tight(x):
             if height:
                 x = re.sub(r'(<hh:charPr [^>]*?height=")\d+', rf'\g<1>{height}', x, count=1)
-            x = re.sub(r'(<hh:spacing )[^/]*/>', r'\1hangul="-8" latin="-8" hanja="-8" japanese="-8" other="-8" symbol="-8" user="-8"/>', x)
-            return re.sub(r'(<hh:ratio )[^/]*/>', r'\1hangul="98" latin="98" hanja="98" japanese="98" other="98" symbol="98" user="98"/>', x)
-        return self._clone('charPr', 'charProperties', char_id, tight, height or '')
+            x = re.sub(r'<hh:spacing [^/]*/>', '<hh:spacing ' + ' '.join(f'{k}="{sp}"' for k in langs) + '/>', x)
+            return re.sub(r'<hh:ratio [^/]*/>', '<hh:ratio ' + ' '.join(f'{k}="{ra}"' for k in langs) + '/>', x)
+        return self._clone('charPr', 'charProperties', char_id, tight, f'{height or ""}/{sp}/{ra}')
 
     def border(self, fill_id, sides):
-        """표 칸 테두리: sides = {'left': ('SOLID', '0.12 mm'), ...}. 선 색은 모두 검은색, 바탕색은 그대로."""
+        """표 칸 테두리: sides = {'left': ('SOLID', '0.12 mm'), ...}. 선 색은 스킬 값(기본 검은색), 바탕색은 그대로."""
+        col = str(SK.get('table', 'line_color')).lstrip('#')
+
         def lines(x):
             for s, (kind, width) in sides.items():
-                x = re.sub(rf'<hh:{s}Border [^/]*/>', f'<hh:{s}Border type="{kind}" width="{width}" color="#000000"/>', x)
-            return re.sub(r'(<hh:diagonal [^/]*color=")#\w+', r'\1#000000', x)
-        variant = ','.join(f'{s}={k}/{w}' for s, (k, w) in sorted(sides.items()))
+                x = re.sub(rf'<hh:{s}Border [^/]*/>', f'<hh:{s}Border type="{kind}" width="{width}" color="#{col}"/>', x)
+            return re.sub(r'(<hh:diagonal [^/]*color=")#\w+', rf'\g<1>#{col}', x)
+        variant = col + ':' + ','.join(f'{s}={k}/{w}' for s, (k, w) in sorted(sides.items()))
         return self._clone('borderFill', 'borderFills', fill_id, lines, variant)
 
     def small_right(self, para_id):
@@ -165,7 +178,10 @@ class Form:
 
 # ---------- 표 ----------
 FONT = 1300      # 표 글자 13pt = 1300 HWPUNIT(한글 한 글자 폭에 가깝다)
-TIGHT = 0.90     # 장평 98% + 자간 -8% → 글자 폭 약 90%
+TIGHT = 1.0      # 장평 100% × 자간 0% (보고서 작성 스킬 v2: 표 자간 줄이지 않음)
+TIGHT_LO = 0.94  # 넘치는 칸만 자간 -6%
+OVER_SP = -6
+ALIGN_RIGHT = True
 PAD = 1020 + 400  # 칸 안 여백(양식: 좌우 각 510) + 여유
 SLACK = 150      # 칸마다 남겨 둘 여유(글자 폭 어림 오차)
 RIGHT_GAP = 300  # 숫자 칸 오른쪽 여백(양식 3,500 → 300)
@@ -173,8 +189,22 @@ FONT_STEPS = (1300, 1250, 1200, 1150, 1100)  # 본문 줄이 한 줄에 안 들�
 SLIM_MARGIN = 283  # 그래도 넘치면 칸 안 좌우 여백을 1mm로
 
 
-def _glyphs(s, font=FONT):
+def apply_skill():
+    """보고서 작성 스킬(SKILL.md settings.table) 값으로 표 글자·여백 기준을 맞춘다. 한글 파일을 만들 때마다 다시 읽는다."""
+    global FONT, TIGHT, TIGHT_LO, OVER_SP, FONT_STEPS, SLIM_MARGIN, ALIGN_RIGHT
+    t = SK.load()['settings']['table']
+    FONT = SK.hwp(t['font_pt'])
+    TIGHT = round(t['char_ratio'] / 100 * (1 + t['char_spacing'] / 100), 3)  # 장평 100% × 자간 0% = 1.0
+    OVER_SP = max(int(t.get('overflow_spacing', -6)), -6)  # 넘치는 칸만 쓰는 자간(-6을 넘기지 않음)
+    TIGHT_LO = round(t['char_ratio'] / 100 * (1 + OVER_SP / 100), 3)
+    ALIGN_RIGHT = t.get('align') == 'right'
+    FONT_STEPS = SK.font_steps()
+    SLIM_MARGIN = int(round(t['slim_margin_mm'] * 283.46))  # 1mm ≈ 283 HWPUNIT
+
+
+def _glyphs(s, font=None):
     """글자 폭 어림(HWPUNIT, 자간 줄인 표 글자 기준): 한글·한자 1em, 숫자·영문 0.6em, 기호·공백 0.4em."""
+    font = font or FONT
     w = 0
     for ch in s:
         if '가' <= ch <= '힣' or 'ㄱ' <= ch <= 'ㆎ' or '一' <= ch <= '鿿' or ch in '㎡※□ㅇ◈':
@@ -206,6 +236,34 @@ def _one_line_widths(data, n, total, pad, font):
     widths = [w + extra * w // sum(want) for w in want]
     widths[-1] += total - sum(widths)
     return widths
+
+
+def _squeeze_widths(data, n, total, pad, font):
+    """③ 넘치는 칸만 자간 -6%: 필요한 폭이 큰 열부터 하나씩 좁은 자간으로 바꿔 표 폭에 맞춘다.
+    반환: (열 너비, 좁힌 열 번호 집합) 또는 (None, set())"""
+    global TIGHT
+    body = data[1:] or data
+
+    def need(j, tight):
+        global TIGHT
+        keep, TIGHT = TIGHT, (TIGHT_LO if tight else TIGHT)
+        w = max(max(_glyphs(r[j], font) + pad + (RIGHT_GAP if _is_num(r[j]) else 0) for r in body if j < len(r)),
+                _two_lines(data[0][j], font) + pad)
+        TIGHT = keep
+        return w
+    normal = [need(j, False) for j in range(n)]
+    tight = [need(j, True) for j in range(n)]
+    want, cols = normal[:], set()
+    for j in sorted(range(n), key=lambda j: -normal[j]):  # 가장 넓은 열부터
+        if sum(want) <= total:
+            break
+        want[j], _ = tight[j], cols.add(j)
+    if sum(want) > total:
+        return None, set()
+    extra = total - sum(want)
+    widths = [w + extra * w // sum(want) for w in want]
+    widths[-1] += total - sum(widths)
+    return widths, cols
 
 
 def _col_widths(data, n, total, pad=PAD):
@@ -252,9 +310,11 @@ def _col_widths(data, n, total, pad=PAD):
 def _cell_lines(ri, j, nrows, ncols):
     """양식 표 테두리(가이드라인 견본 기준): 양옆 바깥선 없음, 위·아래 바깥선 0.25mm,
     제목줄 아래만 이중선, 나머지 안쪽 선 0.12mm. 견본의 빨간 굵은 선(설명용 표시)은 따르지 않는다."""
-    thin, thick, double = ('SOLID', '0.12 mm'), ('SOLID', '0.25 mm'), ('DOUBLE_SLIM', '0.5 mm')
-    return {'left': ('NONE', '0.12 mm') if j == 0 else thin,
-            'right': ('NONE', '0.12 mm') if j == ncols - 1 else thin,
+    t = SK.load()['settings']['table']  # 선 굵기: 보고서 작성 스킬 값
+    thin, thick = ('SOLID', f"{t['inner_line_mm']:g} mm"), ('SOLID', f"{t['outer_line_mm']:g} mm")
+    double = ('DOUBLE_SLIM', f"{t['head_double_mm']:g} mm")
+    return {'left': ('NONE', thin[1]) if j == 0 else thin,
+            'right': ('NONE', thin[1]) if j == ncols - 1 else thin,
             'top': thick if ri == 0 else (double if ri == 1 else thin),
             'bottom': double if ri == 0 else (thick if ri == nrows - 1 else thin)}
 
@@ -282,9 +342,16 @@ def _table(proto, cols, rows, F):
                 break
         if widths:
             break
-    if not widths:
+    over = set()  # 자간 -6%로 좁힌 열
+    if not widths:  # ③ 11pt·여백 1mm로도 넘치면: 넘치는 열만 자간 -6%로 다시 맞춰 본다
+        widths, over = _squeeze_widths(data, n, total, 2 * min(side, SLIM_MARGIN) + SLACK, FONT_STEPS[-1])
+        if widths:
+            font, margin = FONT_STEPS[-1], min(side, SLIM_MARGIN)
+    if not widths:  # ④ 마지막 수단: 긴 글자 칸만 줄바꿈
         margin = side
         widths = _col_widths(data, n, total, 2 * side + SLACK)
+    if ALIGN_RIGHT:  # 표 본체 오른쪽 정렬
+        head = re.sub(r'(<hp:p [^>]*?paraPrIDRef=")(\d+)', lambda m: m.group(1) + F.align_right(m.group(2)), head, count=1)
     if margin != side:
         head = re.sub(r'(<hp:inMargin left=")\d+(" right=")\d+', rf'\g<1>{margin}\g<2>{margin}', head, count=1)
     size = font if font and font != FONT else None
@@ -302,7 +369,10 @@ def _table(proto, cols, rows, F):
                 c = re.sub(r'(<hp:p [^>]*?)paraPrIDRef="\d+"', lambda m: m.group(1) + f'paraPrIDRef="{num_para if numeric else text_para}"',
                            c, count=1)
             c = _fill(c, [v])
-            c = re.sub(r'charPrIDRef="(\d+)"', lambda m: f'charPrIDRef="{F.tight_char(m.group(1), size)}"', c)
+            pad = 2 * margin + SLACK + (RIGHT_GAP if numeric else 0)
+            squeeze = j in over and (_two_lines(v, font) if ri == 0 else _glyphs(v, font)) + pad > widths[j]  # 이 칸만 넘침
+            c = re.sub(r'charPrIDRef="(\d+)"',
+                       lambda m: f'charPrIDRef="{F.tight_char(m.group(1), size, OVER_SP if squeeze else None)}"', c)
             c = re.sub(r'(<hp:tc [^>]*?borderFillIDRef=")(\d+)',
                        lambda m: m.group(1) + F.border(m.group(2), _cell_lines(ri, j, len(data), n)), c, count=1)
             if margin != side:  # 칸마다 따로 여백을 쓰는 경우까지 맞춘다
@@ -332,7 +402,9 @@ def _body_roles(F, start=0):
     tbl = F.find(lambda t: t.startswith('구분내용수량금액'), start)
     if None not in (cap, unit, tbl):
         roles.update(cap=F.segs[cap], unit=F.segs[unit], table=F.segs[tbl])
-        gaps['table'] = F.segs[tbl + 1] if tbl + 1 < len(F.segs) else ''
+        # 표 뒤 띄움: 견본 표 다음 문단이 빈 줄일 때만 쓴다. 견본의 작성 안내("* 숫자는 우측정렬 …")가 보고서에 들어가지 않게
+        nxt = tbl + 1
+        gaps['table'] = F.segs[nxt] if nxt < len(F.segs) and not F.texts[nxt].strip() else gaps.get('sq', '')
     return roles, gaps
 
 
@@ -364,6 +436,7 @@ def render(styled, form):
     path = template_path(form)
     if not path:
         raise FileNotFoundError(f'{form} 한글 서식 파일이 templates/company/ 에 없습니다.')
+    apply_skill()
     F = Form(path)
     kind = lh_style.FORMS[form][0]
     title = next((b[1] for b in styled if b[0] in ('title', 'cover', 'head1p', 'ptitle')), '보고서')

@@ -39,10 +39,17 @@ def run(docs, items, use_llm=False, cfg=None, on_progress=None):
         if on_progress:
             on_progress(i, len(docs), d)
         try:
+            text = reader.read_text(d['path'])
+            facs = list(dict.fromkeys(i['facility'] for i in items))
             if use_llm:
-                cands, _ = reader.extract_candidates(d, items, cfg)
+                cands, meta = reader.extract_candidates(d, items, cfg, text=text)
+                events = meta.get('events') or []
+                if not any(e['kind'] in ('경위', '계획') for e in events):  # AI가 경위를 안 줬으면 규칙으로 보탬
+                    events += reader.extract_events(text, facs, d.get('date'))
             else:
-                cands = reader.rule_extract(d, items)
+                cands = reader.rule_extract(d, items, text=text)
+                events = reader.extract_events(text, facs, d.get('date'))
+            d['events'] = events  # 추진경위·향후 일정(날짜별 여러 줄) → A02가 events 표에 저장
             out.append((d, cands, ''))
         except Exception as e:  # 값을 추측해 채우지 않고 읽기 실패로 넘긴다
             out.append((d, [], f'읽기 실패(확인 필요): {e}'))

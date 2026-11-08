@@ -29,7 +29,7 @@ def run(facts, purpose, facilities=None, use_llm=False, cfg=None):
     반환: {'purpose', 'basis', 'facts': 고른 DB 항목, 'table': 자료표 행, 'lacking': 부족·미확정 항목}"""
     if facilities:
         sel = [f for f in facts if f['facility'] in facilities]
-        basis = '대상 사업 선택: ' + ', '.join(facilities)
+        basis = '대상 사업 선택: ' + ', '.join(f for f in facilities if f != '지구 공통')
     else:
         sel, basis = query.select(facts, purpose, use_llm, cfg)
     lacking = [f for f in sel if f['status'] != '참고' and (f['value'] is None or f['status'] == '미확정(충돌)')]

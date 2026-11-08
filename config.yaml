@@ -3,22 +3,35 @@ district: 누리마루지구          # 처음 보여 줄 지구(문서에 지�
 report:
   dept: 누리마루사업단 광역교통팀   # 보고서 날짜줄에 들어가는 작성 부서 (화면에서 바꿀 수 있음)
 
-# 모델 교체 지점. 앱의 모든 LLM 호출은 llm.py의 ask()를 거치며 아래 값만 읽습니다.
+# 모델 교체 지점. 앱의 모든 LLM 호출은 common/llm.py의 ask()를 거치며 아래 llm 블록만 읽습니다.
+# 지금 쓰는 모델: Claude Sonnet 5.5 (Anthropic API, 유료 크레딧에서 차감). 키는 환경변수로만 넣습니다.
 llm:
-  provider: anthropic              # anthropic 또는 openai_compatible
+  provider: anthropic
   model: claude-sonnet-5-5
   base_url: https://api.anthropic.com
   api_key_env: ANTHROPIC_API_KEY   # 키를 담은 환경변수 이름 (키 값 아님)
-  max_tokens: 4096
+  max_tokens: 16000                # 생각(추론)에 쓰는 토큰도 이 한도 안에 들어가므로 넉넉히
+  effort: low                      # 생각 정도(low·medium·high). 추출·해석은 단순 작업이라 low로 빠르고 싸게
+  workspace_id: ''   # 작업공간 ID는 저장소에 쓰지 않음 → 환경변수·Secrets의 ANTHROPIC_WORKSPACE_ID (조직 키일 때만 필요)
 
-# 두 번째 모델 예: OpenAI 호환 주소(base_url)가 있는 모델이면 위 llm 블록을 이렇게 바꿉니다.
+# 두 번째 모델: Google Gemini 무료 사용량(OpenAI 호환 주소). 11-06 시험에서 추출 정확도 확인함.
+# 무료 요금제는 보낸 내용이 서비스 개선에 쓰이므로 모의 문서만 넣습니다.
+# llm:
+#   provider: openai_compatible
+#   model: gemini-3.5-flash-lite      # gemini-3.8-flash는 11-06 시험 때 응답이 없었음
+#   base_url: https://generativelanguage.googleapis.com/v1beta/openai
+#   api_key_env: GEMINI_API_KEY
+#   max_tokens: 16000
+#   reasoning_effort: low
+
+# 내 PC·사내 서버의 모델(Ollama 등 OpenAI 호환 서버) 예:
 # llm:
 #   provider: openai_compatible
 #   model: <모델 이름>
-#   base_url: http://localhost:11434/v1     # 예: 로컬 서버. 사내·클라우드 주소도 가능
-#   api_key_env: OPENAI_API_KEY             # 키가 필요 없는 로컬 서버면 빈 값("")
+#   base_url: http://localhost:11434/v1
+#   api_key_env: ""                         # 키가 필요 없는 로컬 서버면 빈 값
 #   max_tokens: 4096
-#   json_response_format: true              # 서버가 response_format을 지원할 때만 true
+#   json_response_format: true              # 서버가 response_format(json_object)을 지원할 때만 true
 
 # 사업지구와 광역교통시설(사업). type은 사업 유형(도로/철도/환승/대중교통)으로, 통합 비교·필터와 추출 항목에 쓴다.
 # 문서마다 어느 지구 문서인지 지정하며(파일명에 지구 이름이 있으면 자동), 판정은 지구별로 따로 한다.
@@ -47,14 +60,35 @@ districts:
       - {name: 솔내 순환버스 지원, type: 대중교통}
 
 # 사업 유형별로 문서에서 뽑을 항목(항목·단위). 단위는 이 목록으로 통일한다.
-# kind: attr = 짧은 속성(시행주체), status = 추진상태, issue = 현안, plan = 향후계획. 문장형도 같은 판정 규칙으로 최신값을 정한다.
+# kind: attr = 짧은 속성(시행주체·사업기호·관리상태·추진단계), status = 추진상태, issue = 현안, plan = 향후계획,
+#       delay = 지연사유(문제점), remedy = 만회대책(대응방안). 문장형도 같은 판정 규칙으로 최신값을 정한다.
+# 시기 항목: 완료시기·개통목표 = 개선대책상 완료시기, 예상완료 = 실제(예상) 완료·준공시기, 착공시기 = 착공(예정·실적)
+# 1차 적재 항목(현안보고 기준, 2026-11-07 확정): 아래 항목 + 지구 공통(사업시행자·대책수립일·최초입주·총사업비)
+#   + 추진경위·향후 일정 목록(DB events 표, 날짜별 여러 줄)
 item_templates:
-  도로:     [{item: 연장, unit: km}, {item: 차로, unit: 차로}, {item: 사업비, unit: 억원}, {item: 완료시기, unit: ""}]
-  철도:     [{item: 연장, unit: km}, {item: 사업비, unit: 억원}, {item: 개통목표, unit: ""}]
-  환승:     [{item: 규모, unit: ㎡}, {item: 사업비, unit: 억원}, {item: 완료시기, unit: ""}]
-  대중교통: [{item: 연장, unit: km}, {item: 사업비, unit: 억원}, {item: 지원액, unit: 억원}, {item: 완료시기, unit: ""}]
+  도로:     [{item: 연장, unit: km}, {item: 차로, unit: 차로}, {item: 사업비, unit: 억원}, {item: 시행자부담, unit: 억원},
+             {item: 완료시기, unit: ""}, {item: 착공시기, unit: ""}, {item: 예상완료, unit: ""}]
+  철도:     [{item: 연장, unit: km}, {item: 사업비, unit: 억원}, {item: 시행자부담, unit: 억원},
+             {item: 개통목표, unit: ""}, {item: 착공시기, unit: ""}, {item: 예상완료, unit: ""}]
+  환승:     [{item: 규모, unit: ㎡}, {item: 사업비, unit: 억원}, {item: 시행자부담, unit: 억원},
+             {item: 완료시기, unit: ""}, {item: 착공시기, unit: ""}, {item: 예상완료, unit: ""}]
+  대중교통: [{item: 연장, unit: km}, {item: 사업비, unit: 억원}, {item: 지원액, unit: 억원}, {item: 시행자부담, unit: 억원},
+             {item: 완료시기, unit: ""}, {item: 예상완료, unit: ""}]
+  # 접속시설: 연결도로의 IC·교차로 등 접속부(개선대책 표의 Ⓐ-1 등). 환승 = 환승시설
+  접속시설: [{item: 사업비, unit: 억원}, {item: 시행자부담, unit: 억원},
+             {item: 완료시기, unit: ""}, {item: 착공시기, unit: ""}, {item: 예상완료, unit: ""}]
+  # 지구 전체에 하나인 값: 각 지구에 '지구 공통' 행으로 자동 추가된다(common_items는 붙지 않음)
+  지구:     [{item: 지구명칭, unit: "", kind: attr}, {item: 사업시행자, unit: "", kind: attr}, {item: 대책수립일, unit: ""},
+             {item: 대책시행시기, unit: ""}, {item: 최초입주, unit: ""}, {item: 총사업비, unit: 억원}]
+  # 지구명칭 = 공식 명칭(예: 해오름 공공주택지구), 대책시행시기 = 광역교통개선대책상 시행(사업)기간 끝(예: 2031.12)
 common_items:
+  - {item: 사업기호, unit: "", kind: attr}      # 개선대책 표의 기호(가, 나-1, Ⓐ-1 …)
   - {item: 시행주체, unit: "", kind: attr}
+  - {item: 담당시행자, unit: "", kind: attr}    # 공동사업시행자 간 분담(LH·GH 등)
+  - {item: 관리상태, unit: "", kind: attr}      # 정상추진 / 지연우려
+  - {item: 추진단계, unit: "", kind: attr}      # 미착공·설계·인허가·보상·공사·준공
   - {item: 추진상태, unit: "", kind: status}
   - {item: 현안, unit: "", kind: issue}
+  - {item: 지연사유, unit: "", kind: delay}
+  - {item: 만회대책, unit: "", kind: remedy}
   - {item: 향후계획, unit: "", kind: plan}

@@ -10,6 +10,7 @@ from datetime import datetime
 from io import BytesIO
 
 from agents.a04_draft import draft
+from agents.a04_draft import skill as SK
 
 FORMS = {  # 이름: (종류, 색)
     '짧은 보고서(푸른색)': ('short', 'blue'),
@@ -17,7 +18,7 @@ FORMS = {  # 이름: (종류, 색)
     '표지 있는 보고서(푸른색)': ('cover', 'blue'),
     '표지 있는 보고서(붉은색)': ('cover', 'red'),
     '1쪽 보고서': ('onepage', 'blue'),
-    '보도자료': ('press', 'blue'),
+    # '보도자료': ('press', 'blue'),  — 현안 보고자료 하나만 만들기로 해서 뺌(코드는 남겨 둠)
     '디딤돌 기본': ('basic', 'blue'),
 }
 FORM_HELP = {
@@ -197,11 +198,11 @@ def to_html(blocks, form):
             o.append(f'<div class="hd big">{e(b[1])}. {e(b[2])}</div>')
         elif k == 'sq':
             key = f'<b>({e(b[1])})</b> ' if b[1] and b[2] else (f'<b>{e(b[1])}</b>' if b[1] else '')
-            o.append(f'<div class="sq">□ {key}{e(b[2])}</div>')
+            o.append(f'<div class="sq">□ {key}{pp(e(b[2]))}</div>')
         elif k == 'o':
-            o.append(f'<div class="o">ㅇ {e(b[1])}</div>')
+            o.append(f'<div class="o">ㅇ {pp(e(b[1]))}</div>')
         elif k == 'dash':
-            o.append(f'<div class="dash">- {e(b[1])}</div>')
+            o.append(f'<div class="dash">- {pp(e(b[1]))}</div>')
         elif k == 'note':
             o.append(f'<div class="note">* {e(b[1])}</div>')
         elif k == 'table':
@@ -218,7 +219,33 @@ def to_html(blocks, form):
         elif k == 'contact':
             o.append(f'<table class="ct2"><tr><td>담당부서</td><td>{e(b[1])}</td><td>책임자</td><td>팀장 ______ ( - - )</td></tr>'
                      f'<tr><td></td><td></td><td>담당자</td><td>______ ( - - )</td></tr></table>')
-    return CSS + '<div class="lh">' + ''.join(o) + '</div>'
+    return CSS + skill_css() + '<div class="lh">' + ''.join(o) + '</div>'
+
+
+PAREN = re.compile(r'(\([^()]*\d[^()]*\))')  # 괄호 안 수치·세부: (3.4km, 820억원), (’32.6월 예정)
+
+
+def pp(html_text):
+    """미리보기: 괄호 안 수치·세부를 작은 글자로"""
+    return PAREN.sub(r'<span class="pp">\1</span>', html_text)
+
+
+def skill_css():
+    """보고서 작성 스킬 값(표 글자·선·제목줄 배경, 본문 글자·줄간격·문단 간격)으로 미리보기 모양을 덮어쓴다."""
+    s = SK.load()['settings']
+    t, b = s['table'], s['body']
+    line = f"#{str(t['line_color']).lstrip('#')}"
+    return ('<style>'
+            f".lh{{font-size:{b['font_pt']:g}px;line-height:{b['line_spacing'] / 100:g}}}.lh .pp{{font-size:{b['paren_pt']:g}px}}"
+            f".lh .sq{{margin-top:{b['before_sq_pt']:g}px}}.lh .o{{margin-top:{b['before_o_pt']:g}px}}"
+            f".lh .dash{{margin-top:{b['before_dash_pt']:g}px}}"
+            f".lh .note{{margin-top:{b['before_note_pt']:g}px;font-size:{b['note_pt']:g}px}}"
+            f".lh table:not(.ct2){{font-size:{t['font_pt']:g}px;letter-spacing:{t['char_spacing'] / 100:g}em;"
+            f"border-top:{t['outer_line_mm'] * 4:g}px solid {line};border-bottom:{t['outer_line_mm'] * 4:g}px solid {line}}}"
+            f".lh table:not(.ct2) td,.lh table:not(.ct2) th{{border:1px solid {line};white-space:nowrap}}"
+            ".lh table:not(.ct2) tr>:first-child{border-left:0}.lh table:not(.ct2) tr>:last-child{border-right:0}"
+            f".lh table:not(.ct2) th{{background:#{t['header_fill']};border-bottom:3px double {line}}}"
+            '</style>')
 
 
 # ---------- 워드(docx) ----------
@@ -232,6 +259,13 @@ def to_docx(blocks, form):
     from docx.shared import Mm, Pt
     kind, color = FORMS[form]
     top_c, bottom_c = COLOR[color]
+    sk = SK.load()['settings']  # 보고서 작성 스킬: 본문·표 글자, 간격, 선
+    BT, BS, TB = sk['body'], sk['body']['font_pt'], sk['table']
+    LS = BT['line_spacing'] / 100
+    LINE = str(TB['line_color']).lstrip('#')
+
+    def eighths(mm):  # mm → 워드 선 굵기 단위(1/8pt)
+        return str(max(2, round(mm * 72 / 25.4 * 8)))
     d = docx.Document()
     sec = d.sections[0]
     sec.page_height, sec.page_width = Mm(297), Mm(210)
@@ -249,7 +283,13 @@ def to_docx(blocks, form):
         for a in ('w:ascii', 'w:hAnsi', 'w:eastAsia'):
             rf.set(qn(a), name)
 
-    def para(text='', name=BODY, size=15, bold=False, align=None, before=0, left=0.0, hanging=0.0, line=1.6):
+    def body_runs(p, text):
+        """본문 꼭지: 괄호 안 수치·세부는 작은 글자(스킬 body.paren_pt, 굵게 안 함), 나머지는 본문 글자."""
+        for part in PAREN.split(text):
+            if part:
+                font(p.add_run(part), BODY, BT['paren_pt'] if PAREN.fullmatch(part) else BS)
+
+    def para(text='', name=BODY, size=15, bold=False, align=None, before=0, left=0.0, hanging=0.0, line=LS):
         p = d.add_paragraph()
         f = p.paragraph_format
         f.space_before, f.space_after, f.line_spacing = Pt(before), Pt(0), line
@@ -278,11 +318,18 @@ def to_docx(blocks, form):
             sh.set(qn(a), v)
         el_pr.append(sh)
 
-    def cell_text(cell, text, size=13, bold=False, name=NOTE, align=WD_ALIGN_PARAGRAPH.CENTER):
+    def cell_text(cell, text, size=13, bold=False, name=NOTE, align=WD_ALIGN_PARAGRAPH.CENTER, tight=False):
         p = cell.paragraphs[0]
         p.alignment = align
         p.paragraph_format.line_spacing = 1.3
-        font(p.add_run(text), name, size, bold)
+        run = p.add_run(text)
+        font(run, name, size, bold)
+        if tight:  # 표 글자 자간·장평(스킬)
+            rpr = run._element.get_or_add_rPr()
+            for tag, val in (('w:spacing', str(round(size * 20 * TB['char_spacing'] / 100))), ('w:w', str(TB['char_ratio']))):
+                el = OxmlElement(tag)
+                el.set(qn('w:val'), val)
+                rpr.append(el)
 
     for b in blocks:
         k = b[0]
@@ -329,30 +376,45 @@ def to_docx(blocks, form):
             p = para(f'{b[1]}. {b[2]}', HEAD, 18, before=16)
             border(p, 'bottom', 12, '333333')
         elif k == 'sq':
-            p = para(before=8, left=5, hanging=5)
-            font(p.add_run('□ '), BODY, 15)
+            p = para(before=BT['before_sq_pt'], left=5, hanging=5)
+            font(p.add_run('□ '), BODY, BS)
             if b[1]:
-                font(p.add_run(f'({b[1]}) ' if b[2] else b[1]), BODY, 15, bold=True)
+                font(p.add_run(f'({b[1]}) ' if b[2] else b[1]), BODY, BS, bold=True)
             if b[2]:
-                font(p.add_run(b[2]), BODY, 15)
+                body_runs(p, b[2])
         elif k == 'o':
-            para('ㅇ ' + b[1], BODY, 15, before=6, left=8.5, hanging=5)
+            body_runs(para(before=BT['before_o_pt'], left=8.5, hanging=5), 'ㅇ ' + b[1])
         elif k == 'dash':
-            para('- ' + b[1], BODY, 15, before=4, left=14, hanging=4)
+            body_runs(para(before=BT['before_dash_pt'], left=14, hanging=4), '- ' + b[1])
         elif k == 'note':
-            para('* ' + b[1], NOTE, 13, before=3, left=17, hanging=3)
+            para('* ' + b[1], NOTE, BT['note_pt'], before=BT['before_note_pt'], left=17, hanging=3)
         elif k == 'table':
             para(f'< {b[1]} >', NOTE, 14, align=WD_ALIGN_PARAGRAPH.CENTER, before=8)
             t = d.add_table(rows=1, cols=len(b[2]))
             t.style = 'Table Grid'
-            t.alignment = WD_TABLE_ALIGNMENT.CENTER
+            t.alignment = WD_TABLE_ALIGNMENT.RIGHT if TB.get('align') == 'right' else WD_TABLE_ALIGNMENT.CENTER
+            # 표 선(스킬): 위·아래 바깥선, 안쪽 선, 바깥 좌우 선 없음, 모두 같은 색
+            tbl_b = OxmlElement('w:tblBorders')
+            for side, val, mm in (('top', 'single', TB['outer_line_mm']), ('bottom', 'single', TB['outer_line_mm']),
+                                  ('left', 'nil', 0), ('right', 'nil', 0),
+                                  ('insideH', 'single', TB['inner_line_mm']), ('insideV', 'single', TB['inner_line_mm'])):
+                el = OxmlElement(f'w:{side}')
+                for a, v in (('w:val', val), ('w:sz', eighths(mm)), ('w:space', '0'), ('w:color', LINE)):
+                    el.set(qn(a), v)
+                tbl_b.append(el)
+            t._tbl.tblPr.append(tbl_b)
+            # 글자: 스킬의 표 글자 크기부터, 본문 칸이 한 줄에 안 들어갈 것 같으면 최소 크기까지 줄임
+            widest = max(sum(len(str(v)) for v in r) for r in b[3]) if b[3] else 0
+            tsize = TB['font_pt']
+            while tsize > TB['min_font_pt'] and widest * tsize * 0.9 > 170 * 72 / 25.4 * 0.95:
+                tsize -= TB['font_step_pt']
             for i, c in enumerate(b[2]):
                 cell = t.rows[0].cells[i]
-                shade(cell._tc.get_or_add_tcPr(), 'D9D9D9')
-                cell_text(cell, c, 12, bold=True)
+                shade(cell._tc.get_or_add_tcPr(), str(TB['header_fill']).lstrip('#'))
+                cell_text(cell, c, tsize, bold=True, tight=True)
                 tcb = OxmlElement('w:tcBorders')  # 제목줄 하단 이중실선
                 bt = OxmlElement('w:bottom')
-                for a, v in (('w:val', 'double'), ('w:sz', '6'), ('w:color', '333333')):
+                for a, v in (('w:val', 'double'), ('w:sz', eighths(TB['head_double_mm'] / 3)), ('w:color', LINE)):
                     bt.set(qn(a), v)
                 tcb.append(bt)
                 cell._tc.get_or_add_tcPr().append(tcb)
@@ -360,7 +422,7 @@ def to_docx(blocks, form):
                 cells = t.add_row().cells
                 for i, v in enumerate(r):
                     num = re.fullmatch(r'[\d,.]+', str(v))
-                    cell_text(cells[i], str(v), 12, align=WD_ALIGN_PARAGRAPH.RIGHT if num else WD_ALIGN_PARAGRAPH.CENTER)
+                    cell_text(cells[i], str(v), tsize, align=WD_ALIGN_PARAGRAPH.RIGHT if num else WD_ALIGN_PARAGRAPH.CENTER, tight=True)
         elif k == 'presshead':
             t = d.add_table(rows=1, cols=1)
             t.style = 'Table Grid'

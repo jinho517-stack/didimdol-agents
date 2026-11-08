@@ -27,6 +27,8 @@ create table if not exists history(id integer primary key, facts_id integer, pre
     reason text, kind text, changed_at text);
 create table if not exists choices(id integer primary key, district text, facility text, item text, candidates text,
     value text, chooser text, chosen_at text, active integer default 1);
+create table if not exists events(id integer primary key, doc_id text, district text, facility text, kind text,
+    date text, content text, location text);
 """
 
 
@@ -52,7 +54,7 @@ def rows(con, sql, args=()):
 
 def reset(con):
     con.executescript('delete from sources; delete from candidates; delete from facts; '
-                      'delete from history; delete from choices;')
+                      'delete from history; delete from choices; delete from events;')
     con.commit()
 
 
@@ -78,10 +80,47 @@ def save_document(con, doc, cands):
     con.executemany('insert into candidates(doc_id, facility, item, value, unit, location) values(?,?,?,?,?,?)',
                     [(doc['doc_id'], c['facility'], c['item'], c['value'], c.get('unit', ''), c.get('location', ''))
                      for c in cands])
+    # 추진경위·향후 일정(날짜별 여러 줄): 판정 없이 문서별로 쌓는다(같은 문서를 다시 넣으면 교체)
+    con.execute('delete from events where doc_id=?', (doc['doc_id'],))
+    con.executemany('insert into events(doc_id, district, facility, kind, date, content, location) values(?,?,?,?,?,?,?)',
+                    [(doc['doc_id'], doc.get('district') or '', e['facility'], e['kind'], e['date'], e['content'],
+                      e.get('location', '')) for e in doc.get('events') or []])
     con.commit()
 
 
+def events(con, district, facility=None, kind=None, informal=False):
+    """추진경위(kind='경위')·향후 일정(kind='계획') 목록. 같은 사업·날짜·내용은 한 줄로(가장 최근 문서 기준).
+    반환: [{'facility','kind','date','content','doc_id','doc_date','stage','location'}] (날짜순)"""
+    sql = ('select e.facility, e.kind, e.date, e.content, e.doc_id, e.location, s.date as doc_date, s.stage '
+           'from events e join sources s on s.doc_id=e.doc_id where e.district=?')
+    args = [district]
+    if facility:
+        sql += ' and e.facility=?'
+        args.append(facility)
+    if kind:
+        sql += ' and e.kind=?'
+        args.append(kind)
+    seen = {}
+    for r in rows(con, sql, args):
+        if not informal and r['stage'] in INFORMAL:
+            continue
+        k = (r['facility'], r['kind'], r['date'], re.sub(r'\s+', '', r['content']))
+        if k not in seen or (r['doc_date'] or '') > (seen[k]['doc_date'] or ''):
+            seen[k] = r
+    return sorted(seen.values(), key=lambda r: (r['facility'], _date_key(r['date']), r['content']))
+
+
+def _date_key(d):
+    """'2026.9' · '2026.9.17' · '2026 하반기' → 정렬용 (연, 월, 일)"""
+    m = re.match(r'(20\d\d)(?:\.(\d{1,2}))?(?:\.(\d{1,2}))?', d or '')
+    if not m:
+        return (9999, 99, 99)
+    mo = int(m.group(2)) if m.group(2) else (7 if '하반기' in (d or '') else (1 if '상반기' in (d or '') else 12))
+    return (int(m.group(1)), mo, int(m.group(3) or 0))
+
+
 def delete_document(con, doc_id):
+    con.execute('delete from events where doc_id=?', (doc_id,))
     con.execute('delete from candidates where doc_id=?', (doc_id,))
     con.execute('delete from sources where doc_id=?', (doc_id,))
     con.commit()
