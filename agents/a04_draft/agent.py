@@ -126,8 +126,9 @@ def check(blocks, a03, cands=(), sections=(), events=()):
 class Layout:
     """고른 회사 양식으로 초안을 꾸미고 한글·워드·화면용으로 내보낸다."""
 
-    def __init__(self, blocks, form, facts, district='', dept='', kinds=None):
-        self.blocks, self.form = blocks, form
+    def __init__(self, blocks, form, facts, district='', dept='', kinds=None, form_path=None):
+        """form_path: 화면에서 올린 회사 한글 양식 파일(그 접속 동안만). 없으면 templates/company/ 를 찾는다."""
+        self.blocks, self.form, self.form_path = blocks, form, form_path
         self.kind = FORMS[form][0]
         if self.kind == 'press':  # 보도자료: 사업 DB 값으로 따로 구성
             meta = next((b[1] for b in blocks if b[0] == 'meta'), {})
@@ -139,11 +140,11 @@ class Layout:
             self.title, self.hwpx_blocks = next(b[1] for b in blocks if b[0] == 'title'), blocks
         else:
             self.styled, self.title, self.hwpx_blocks = None, next(b[1] for b in blocks if b[0] == 'title'), blocks
-        # 회사 한글 서식 파일(templates/company/)이 있으면 그 서식에 그대로 채운다
-        self.use_form = self.styled is not None and hwpx_forms.available(form)
+        # 회사 한글 서식 파일(올린 파일 또는 templates/company/)이 있으면 그 서식에 그대로 채운다
+        self.use_form = self.styled is not None and hwpx_forms.available(form, form_path)
 
     def hwpx(self):
-        return hwpx_forms.render(self.styled, self.form) if self.use_form else draft.to_hwpx(self.hwpx_blocks)
+        return hwpx_forms.render(self.styled, self.form, self.form_path) if self.use_form else draft.to_hwpx(self.hwpx_blocks)
 
     def docx(self):
         return lh_style.to_docx(self.styled, self.form) if self.styled else draft.to_docx(self.blocks)

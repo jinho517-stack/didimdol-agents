@@ -21,15 +21,45 @@ FILES = {  # 양식 이름 → 파일 이름 앞부분
 S = re.S
 
 
-def template_path(form):
+def template_path(form, path=None):
+    """양식 파일: 화면에서 올린 파일(path, 그 접속 동안만) → 없으면 templates/company/ 의 파일"""
+    if path and Path(path).exists():
+        return Path(path)
     pre = FILES.get(form)
     if not pre or not DIR.exists():
         return None
     return next((p for p in sorted(DIR.glob('*.hwpx')) if p.name.startswith(pre)), None)
 
 
-def available(form):
-    return template_path(form) is not None
+def available(form, path=None):
+    return template_path(form, path) is not None
+
+
+def guess_form(filename):
+    """올린 양식 파일 이름 → 양식 이름(모르면 None). 예: '3-1. (권장양식) 표지가 없는 짧은 보고서(푸른색).hwpx'"""
+    n = Path(filename).name
+    for form, pre in FILES.items():
+        if n.startswith(pre):
+            return form
+    red = '붉은' in n or '빨간' in n
+    if re.search(r'1\s*p|1쪽|한\s*장', n, re.I):
+        return '1쪽 보고서'
+    if '보도' in n:
+        return '보도자료'
+    if '표지가 있는' in n or ('표지' in n and '없는' not in n):
+        return '표지 있는 보고서(붉은색)' if red else '표지 있는 보고서(푸른색)'
+    if '짧은' in n or '표지가 없는' in n:
+        return '짧은 보고서(붉은색)' if red else '짧은 보고서(푸른색)'
+    return None
+
+
+def is_hwpx(path):
+    """올린 파일이 한글(hwpx) 문서인지(본문 section0.xml이 있는지)"""
+    try:
+        with zipfile.ZipFile(path) as z:
+            return 'Contents/section0.xml' in z.namelist()
+    except Exception:
+        return False
 
 
 # ---------- 문단 다루기 ----------
@@ -432,10 +462,10 @@ def _emit(b, roles, gaps, kind, F=None):
     return []
 
 
-def render(styled, form):
-    path = template_path(form)
+def render(styled, form, form_path=None):
+    path = template_path(form, form_path)
     if not path:
-        raise FileNotFoundError(f'{form} 한글 서식 파일이 templates/company/ 에 없습니다.')
+        raise FileNotFoundError(f'{form} 한글 서식 파일이 없습니다(templates/company/ 또는 화면에서 올리기).')
     apply_skill()
     F = Form(path)
     kind = lh_style.FORMS[form][0]

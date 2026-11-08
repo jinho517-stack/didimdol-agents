@@ -663,11 +663,52 @@ def district_dept(district):
     return cache[district]
 
 
+def company_form_box(form):
+    """회사 한글 양식(hwpx): 이 PC의 templates/company/ 에 있으면 그것을, 없으면(클라우드) 화면에서 올린 파일을 쓴다.
+    올린 파일은 이 접속의 임시 폴더에만 두고(다른 접속자와 공유 안 함, 저장소에 안 올라감) 창을 닫으면 사라진다.
+    반환: 이번에 쓸 양식 파일 경로(올린 것) 또는 None"""
+    import tempfile
+    from agents.a04_draft import hwpx_forms
+    if A04.FORMS[form][0] == 'basic':
+        return None
+    local = hwpx_forms.available(form)
+    store = st.session_state.setdefault('form_files', {})  # 양식 이름 → 올린 파일 경로
+    with st.expander('🏢 회사 한글 양식 ' + ('(이 PC에 있음)' if local else '올리기 — 한글본을 회사 양식 그대로 만들려면'),
+                     expanded=not local and form not in store):
+        st.caption('회사 권장양식 hwpx 파일을 올리면 한글 보고서를 그 양식에 그대로 채웁니다. '
+                   '올린 파일은 지금 접속에서만 쓰고 저장소·DB에 남기지 않습니다(창을 닫으면 사라짐).'
+                   + (' 이 PC에는 templates/company/ 양식이 있어 올리지 않아도 됩니다.' if local else ''))
+        ups = st.file_uploader('회사 양식(hwpx, 여러 개 가능)', type=['hwpx'], accept_multiple_files=True,
+                               key='rp_company_forms', label_visibility='collapsed')
+        if ups:
+            folder = Path(st.session_state.setdefault('form_dir', tempfile.mkdtemp(prefix='didimdol_forms_')))
+            for f in ups:
+                p = folder / f.name
+                if not p.exists() or p.stat().st_size != f.size:
+                    p.write_bytes(f.getvalue())
+                if not hwpx_forms.is_hwpx(p):
+                    st.warning(f'{f.name}: 한글(hwpx) 문서가 아닙니다.')
+                    continue
+                guess = hwpx_forms.guess_form(f.name) or (form if len(ups) == 1 else None)
+                if guess:
+                    store[guess] = str(p)
+                else:
+                    st.warning(f'{f.name}: 어느 양식인지 파일 이름으로 알 수 없습니다. 하나씩 올리면 지금 고른 양식으로 씁니다.')
+        if store:
+            st.caption('올린 양식: ' + ' · '.join(f"{k} ← {Path(v).name}" for k, v in store.items()))
+    if form in store:
+        st.markdown(f'<div class="ik-det">🏢 한글본은 올린 회사 양식({esc(Path(store[form]).name)})에 채웁니다.</div>',
+                    unsafe_allow_html=True)
+        return store[form]
+    return None
+
+
 def report_settings(district, facts):
     """왼쪽 칸: 보고서 설정. 반환: 설정 값 묶음"""
     form = st.selectbox('문서 양식', list(A04.FORMS), key='rp_form',
                         help='회사 권장양식(보고서 작성 가이드라인)에 맞춘 글꼴·제목 띠·기호 단계·간격으로 만듭니다.')
     st.caption(A04.FORM_HELP[A04.FORMS[form][0]])
+    form_path = company_form_box(form)
     press = A04.FORMS[form][0] == 'press'
     preset = draft.REPORT  # 보고서 종류는 현안 보고자료 하나
     st.markdown(f'<div class="dg-q">보고서 종류</div><div class="dg-skill">📝 현안 보고자료'
@@ -714,7 +755,7 @@ def report_settings(district, facts):
         st.markdown(sk['text'])
         st.caption(f"파일: {sk['path'].relative_to(BASE.resolve()).as_posix() if sk['found'] else '없음(기본값 사용)'} · "
                    '이 파일을 고치면 다음 초안부터 반영됩니다.')
-    return dict(form=form, press=press, preset=preset, title=title, dept=dept, pick_facs=pick_facs,
+    return dict(form=form, form_path=form_path, press=press, preset=preset, title=title, dept=dept, pick_facs=pick_facs,
                 show_basis=show_basis, chosen=chosen, extra=extra, use_polish=use_polish)
 
 
@@ -791,7 +832,7 @@ def page_report():
             st.button('내려받기는 초안을 만든 뒤에 할 수 있습니다', disabled=True, width='stretch', key='rp_dl_none')
             return
         res3 = rep['a03']
-        lay = A04.Layout(rep['blocks'], o['form'], res3['facts'], district, o['dept'], KINDS)
+        lay = A04.Layout(rep['blocks'], o['form'], res3['facts'], district, o['dept'], KINDS, form_path=o['form_path'])
         safe = re.sub(r'[\\/:*?"<>|]', '_', lay.title)
         with body:
             st.caption(f"A03 자료표 {len(res3['table'])}행({res3['basis']}) → A04 초안 · 양식: {o['form']} · 목차: "
@@ -802,7 +843,7 @@ def page_report():
             st.markdown(lay.html(), unsafe_allow_html=True)
             if lay.styled:
                 st.caption('한글(hwpx)은 회사 양식 서식 파일에 그대로 채워 만들고, 워드는 같은 규칙(글꼴·제목 띠·기호 단계·간격)으로 만듭니다.'
-                           if lay.use_form else '워드 파일에 회사 양식을 적용합니다. 이 양식의 한글 서식 파일(templates/company/)이 없어 한글본은 기본 서식입니다.')
+                           if lay.use_form else '워드 파일에 회사 양식을 적용합니다. 이 양식의 한글 서식 파일이 없어 한글본은 기본 서식입니다 — 왼쪽 "🏢 회사 한글 양식 올리기"에서 양식을 올리면 회사 양식 그대로 나옵니다.')
             with st.expander(f"A03 자료표 (표로 보기, {len(res3['table'])}행)"):
                 st.dataframe(pd.DataFrame(res3['table']), hide_index=True, width='stretch')
         d1, d2, d3 = st.columns(3)
