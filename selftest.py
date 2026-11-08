@@ -312,6 +312,13 @@ def main():
     mixed = catalog.detect_district(base, [p.name for p in other], [extract.read_text(p) for p in other])
     assert mixed['others'], mixed  # 다른 지구 문서가 섞이면 알려 줌
     assert catalog.detect_district(base, ['260805 시행계획 반영 검토표.xlsx'], ['사업별 제원 표']) is None
+    # 새 지구 등록 때 사업 유형 추정: '개선·호선(도로 번호)·교통광장'을 철도로 잘못 보지 않기
+    for name, want in {'한울IC 램프 개선': '도로', '국도 1호선 우회도로 신설': '도로', '지방도 315호선 확장': '도로',
+                       '교차로 개선 (6개소)': '도로', '철도역 연계 교통광장': '환승', '버스 공영차고지': '대중교통',
+                       '해오름선': '철도', '한빛선 철도 연장': '철도', '누리마루선(광역철도)': '철도',
+                       '마유로 연결도로 접속시설': '접속시설'}.items():
+        got = catalog.facility_type({'types': {}}, '', name)
+        assert got == want, (name, got, want)
     ok("파일명에 '지구'가 없는 해오름 문서 → 해오름지구(새 지구), 본문 제목만 있는 미리내 → 미리내지구, "
        f"한빛 문서 → 등록된 한빛지구, 섞인 문서 경고({', '.join(mixed['others'])}), 단서 없으면 추정 안 함")
 

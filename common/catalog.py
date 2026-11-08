@@ -165,14 +165,20 @@ def facility_type(cat, district, facility):
     t = cat['types'].get((district, facility))
     if t:
         return t
+    # 사업명으로 유형 추정(등록된 사업이 아닐 때). 순서가 중요: 접속 → 환승 → 대중교통 → 철도(분명한 말) → 도로 → 철도(○○선)
     if '접속' in facility:
         return '접속시설'
-    if re.search(r'철도|[가-힣]선(\(|$| )|전철|지하철', facility):
-        return '철도'
-    if '환승' in facility:
+    if re.search(r'환승|교통광장|역광장|주차장', facility):
         return '환승'
-    if re.search(r'버스|BRT|대중교통', facility):
+    if re.search(r'버스|BRT|대중교통|차고지|DRT', facility, re.I):
         return '대중교통'
+    if re.search(r'철도|전철|지하철|경전철|GTX|트램', facility, re.I):
+        return '철도'
+    if re.search(r'도로|국도|지방도|우회|교량|교차로|IC|램프|확장|개설|지하차도|고가|연결로|육교|자전거', facility, re.I):
+        return '도로'
+    # '○○선'은 철도 노선(예: 해오름선)이지만 '개선·노선·차선·선형'과 '1호선·315호선'(도로 노선 번호)은 아님
+    if re.search(r'(?<![개노차직곡\d])(?<!\d호)[가-힣]{1,}선(\(|\s|$)', facility) and not re.search(r'\d+호선|개선|노선|차선|선형', facility):
+        return '철도'
     return '도로'
 
 
