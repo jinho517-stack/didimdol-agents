@@ -31,7 +31,7 @@ SAMPLE = BASE / 'sample'
 UPLOADS = db.OUTPUT / 'uploads'
 NAV = ['자료 DB', '보고서 작성']  # 자료 DB가 처음(올리기·분류·적재), 보고서 작성(설정 → 초안 검토 → 한글 저장)
 DOCS, REPORT = NAV
-DB_VIEWS = ['📥 자료 적재', '🗂 적재 현황·관리', '🔎 통합 비교']  # 올리기는 자료 적재 한 곳, 확인·수정은 적재 현황·관리
+DB_VIEWS = ['📥 자료 적재', '🗂 적재 현황·관리']  # 올리기는 자료 적재 한 곳, 적재 현황·관리는 DB 보기·고치기만
 DB_HELP = {'📥 자료 적재': '여러 자료를 한 번에 올리면 → 교통대책·내용별로 나누고 → 애매한 것만 사람이 확인한 뒤 → DB에 적재합니다.',
            '🗂 적재 현황·관리': 'DB에 들어간 값·추진경위와 적재된 문서를 보고, 문서 정보를 고치거나 빼는 곳입니다. '
                             '새 사업지구 등록도 여기(맨 아래)에서 합니다.',
@@ -356,6 +356,9 @@ st.markdown("""<style>
 .rv-src .u{font-size:14px;color:var(--muted)}
 .st-key-rv_doc{background:var(--sunken) !important;border:0 !important;border-radius:var(--r-lg) !important;padding:28px 16px !important}
 .st-key-rv_doc .lh{max-width:680px;margin:0 auto;border:0;box-shadow:0 2px 12px rgba(28,27,25,.08)}
+.st-key-rv_pdf{background:var(--sunken) !important;border-radius:var(--r-lg) !important;padding:24px 20px !important;gap:20px !important}
+.st-key-rv_pdf img{max-width:720px;margin:0 auto;display:block;box-shadow:0 2px 12px rgba(28,27,25,.12);background:#fff}
+.st-key-rv_pdf [data-testid="stImageCaption"]{text-align:center}
 .rv-panel-head{display:flex;align-items:baseline;justify-content:space-between}
 .rv-panel-head h2{margin:0;font-size:18px;font-weight:700;letter-spacing:-.02em;padding:0}
 .rv-panel-head .score{font-size:14px;color:var(--accent);font-weight:700}
@@ -512,7 +515,7 @@ def db_overview():
 
 
 def page_docs():
-    """🗂 적재 현황·관리: DB 적재 현황 → 값 충돌 → 적재된 문서(수정·빼기) → 새 사업지구 등록·문서 하나씩 올리기(접힘)"""
+    """🗂 적재 현황·관리: DB 보기·고치기만(올리기는 자료 적재에서) — 값 충돌 → DB 적재 현황 → 사업 목록·유형 → 적재된 문서(수정·빼기)"""
     conflict_box(st.session_state.get('district') or CAT['default'])  # 방금 저장한 지구에 값 충돌이 있으면 먼저 보여 줌
     registered = db.sources(con)
     if registered:
@@ -522,15 +525,6 @@ def page_docs():
     else:
         st.info('아직 DB에 적재된 문서가 없습니다. 📥 자료 적재에서 자료를 올리세요.')
     show_flash()
-    with st.expander('➕ 새 사업지구 등록 · 문서 하나씩 올려 뽑힌 값 확인 후 저장', expanded=bool(st.session_state.get('up_files'))):
-        st.caption('처음 보는 사업지구 문서는 여기서 올리면 지구 이름·사업 목록을 자동으로 찾아 등록합니다. '
-                   '등록한 뒤에는 📥 자료 적재에서 그 지구를 골라 올리면 됩니다. 원본 문서는 읽기만 하고 사본과 DB는 output/에만 만듭니다.')
-        mode = st.segmented_control('문서 가져오기', ['📁 샘플(모의 문서)', '⬆ 내 문서 올리기'], default='⬆ 내 문서 올리기',
-                                    key='doc_mode', label_visibility='collapsed') or '⬆ 내 문서 올리기'
-        if mode.startswith('📁'):
-            sample_section()
-        else:
-            upload_section()
 
 
 def district_editor():
@@ -843,10 +837,10 @@ def parse_kdate(s):
 
 
 def report_options(district, facts):
-    """세부 설정(접힘): 대상 사업·목차·작성 부서·직접 입력·AI 문장 다듬기·근거 표시. 반환: 값 묶음"""
+    """세부 설정(접힘): 작성 부서·대상 사업·목차·한글 문서 양식(회사 양식 올리기)·AI 문장 다듬기·근거 표시. 반환: 값 묶음"""
     preset = draft.REPORT
     tail, defaults = A04.PRESETS[preset]
-    with st.expander('세부 설정 — 대상 사업·목차·작성 부서·직접 입력'):
+    with st.expander('세부 설정 — 작성 부서·대상 사업·목차·한글 문서 양식'):
         dept = st.text_input('작성 부서', district_dept(district), key=f'rp_dept_{district}',
                              help='이 지구 문서에 가장 많이 나온 작성 부서를 미리 채웁니다. 다르면 고쳐 쓰세요.')
         facs = list(dict.fromkeys(f['facility'] for f in facts if f['facility'] != catalog.DISTRICT_FAC))
@@ -854,23 +848,32 @@ def report_options(district, facts):
         st.markdown('<div class="dg-q">목차</div>', unsafe_allow_html=True)
         cols = st.columns(3)
         chosen = []
-        for i, sec in enumerate(A04.SECTIONS):
-            ai = sec == '종합 의견(AI)'
-            if cols[i % 3].checkbox(sec, value=sec in defaults and not (ai and not HAS_LLM), key=f'rp_{preset}_{sec}',
-                                    help=A04.SECTION_HELP[sec], disabled=ai and not HAS_LLM):
+        for i, sec in enumerate(draft.UI_SECTIONS):  # 담당자가 고친 현안 보고서 구조: 본문 □ 3개 + 붙임 3개
+            if cols[i % 3].checkbox(sec.replace('붙임: ', '붙임 · '), value=sec in defaults, key=f'rp2_{sec}',
+                                    help=A04.SECTION_HELP[sec]):
                 chosen.append(sec)
+        st.caption('붙임은 문서에 그 내용이 있을 때만 붙습니다(예: 관계기관 쟁점은 AI 추출로 쟁점을 찾았을 때).')
+        st.markdown('<div class="dg-q">한글 문서 양식</div>', unsafe_allow_html=True)
+        forms = [f for f in A04.FORMS if A04.FORMS[f][0] != 'press']
+        if st.session_state.get('rp_form') not in forms:
+            st.session_state['rp_form'] = '1쪽 보고서' if '1쪽 보고서' in forms else forms[0]
+        form = st.selectbox('한글 문서 양식', forms, key='rp_form', label_visibility='collapsed',
+                            help='회사 권장양식(보고서 작성 가이드라인)의 글꼴·제목 띠·기호 단계·간격으로 만듭니다.')
+        company_form_box(form)
         extra = {}
-        for sec in ('주요 현안', '향후 계획'):
-            if sec in chosen:
-                extra[sec] = st.text_area(f'{sec} 직접 입력 (선택)', key=f'rp_extra_{sec}', height=80,
-                                          placeholder='한 줄에 하나. "(핵심어) 내용", "- 세부", "⇒ 조치"',
-                                          help='자동으로 만든 문장 뒤에 덧붙습니다. 문서에 없는 계획·현안을 담당자가 적는 칸입니다.')
         c1, c2 = st.columns(2)
         use_polish = c1.toggle('AI 문장 다듬기(서식 규칙 적용)', value=HAS_LLM, disabled=not HAS_LLM, key='rp_polish',
                                help='서식 규칙(담당자 원칙·문장 규칙)대로 AI가 문장을 고칩니다. 숫자·"확인 필요"가 바뀐 줄은 원래 문장을 씁니다.')
         show_basis = c2.toggle('근거 표시(검토용)', value=False, key='rp_basis')
     return dict(preset=preset, dept=dept, pick_facs=pick_facs, chosen=chosen, extra=extra,
                 use_polish=use_polish, show_basis=show_basis)
+
+
+@st.cache_data(show_spinner=False, max_entries=16)
+def pdf_pages(hwpx, docx):
+    """저장 파일 → (PDF, 쪽 그림 목록, 변환한 파일 종류). 같은 파일이면 캐시를 쓴다."""
+    from agents.a04_draft import pdf_preview
+    return pdf_preview.preview(hwpx, docx)
 
 
 def make_report(district, o):
@@ -915,8 +918,6 @@ def report_setup(has_report):
         dtxt = c3.text_input('보고 날짜', lh_style_date(datetime.now()), key='rp_date')
         facts = db.facts(con, district=district)
         o = report_options(district, facts)
-        st.markdown('<p class="nw-hint">꼭지 두 줄 이내 · 개조식 끝맺음 · 표 11pt 이상 · 자료에 없는 숫자는 “확인 필요” · '
-                    '숫자는 모두 DB 최신값</p>', unsafe_allow_html=True)
         _, cgo = st.columns([3, 1])
         with cgo.container(key='nw_go'):
             go = st.button('다시 만들기  →' if has_report else '초안 만들기  →', type='primary', width='stretch')
@@ -928,9 +929,9 @@ def report_setup(has_report):
 
 
 def page_report():
-    """보고서 작성: 설정 → 초안 만들기 → 초안 검토(근거 자료 | 미리보기 | 서식 점검) → 한글(hwpx)로 저장"""
+    """보고서 작성: 설정(세부 설정에 한글 양식) → 초안 만들기 → 초안 검토(근거 자료 | 저장 파일 PDF 미리보기) → 한글(hwpx)로 저장"""
     if not db.facts(con):
-        st.markdown('<div class="nw-hero">' + steps3(1) + '<h1>먼저 자료를 올려 주세요.</h1>'
+        st.markdown('<div class="nw-hero"><h1>먼저 자료를 올려 주세요.</h1>'
                     '<p>자료 DB에서 자료를 올리고 적재하면, 그 값으로 보고서 초안을 만들어요.</p></div>', unsafe_allow_html=True)
         if st.button('자료 DB로  →', type='primary'):
             st.session_state['goto'] = DOCS
@@ -941,35 +942,26 @@ def page_report():
         with st.expander('보고서 설정 바꾸기 · 다시 만들기', expanded=False):
             report_setup(True)
     else:
-        st.markdown(steps3(1), unsafe_allow_html=True)
         report_setup(False)
         st.markdown('<div class="dg-empty"><div class="ico"></div><div>설정을 확인하고 <b>초안 만들기</b>를 누르세요.'
                     '<small>숫자는 모두 DB의 최신값에서 가져옵니다.</small></div></div>', unsafe_allow_html=True)
         return
     district, res3, o = rep['district'], rep['a03'], rep['opts']
     head = st.container()
-    left, mid, right = st.columns([1, 2.7, 1.25], gap='medium')
+    left, mid = st.columns([1, 3.2], gap='medium')
+    forms = [f for f in A04.FORMS if A04.FORMS[f][0] != 'press']
+    form = st.session_state.get('rp_form') if st.session_state.get('rp_form') in forms else \
+        ('1쪽 보고서' if '1쪽 보고서' in forms else forms[0])
+    form_path = st.session_state.get('form_files', {}).get(form)  # 세부 설정에서 올린 회사 양식(이 접속 동안만)
 
-    # 오른쪽: 서식 점검 · 확인 필요 · 양식
-    with right:
-        checks = rep['checks']
-        n_ok = sum(c['결과'] == '통과' for c in checks)
-        with st.container(border=True, key='card_checks'):
-            st.markdown(f'<div class="rv-panel-head"><h2>서식 점검</h2><span class="score">{n_ok} / {len(checks)} 통과</span></div>'
-                        '<ul class="rv-checks">' + ''.join(
-                            f'<li><span class="rv-dot{"" if c["결과"] == "통과" else " warn"}">{"✓" if c["결과"] == "통과" else "!"}</span>'
-                            f'<span><span class="t">{esc(c["점검"])}</span><span class="d">{esc(c["설명"])}</span></span></li>'
-                            for c in checks) + '</ul>', unsafe_allow_html=True)
+    # 왼쪽 아래: 확인 필요(문서 간 값이 다르거나 빈 항목) · AI가 고친 문장
+    with left:
         lack = res3['lacking']
-        warn = [c for c in checks if c['결과'] != '통과']
-        if lack or warn:
+        if lack:
             items = [f"{f['facility']} {f['item']}" for f in lack[:4]]
-            st.markdown(f'<div class="rv-notice"><strong>확인이 필요한 곳 {len(lack) + len(warn)}건</strong><span>'
-                        + (f"문서끼리 값이 다르거나 비어 있는 항목({esc(', '.join(items))}{' 등' if len(lack) > 4 else ''})은 "
-                           '“확인 필요”로 표시했어요. 자료 DB › 값 충돌에서 고르면 다시 만들 때 반영돼요. ' if lack else '')
-                        + ' '.join(esc(c['점검'] + ': ' + c['설명']) for c in warn) + '</span></div>', unsafe_allow_html=True)
-        else:
-            st.markdown('<div class="rv-ok">확인이 필요한 곳이 없어요.</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="rv-notice"><strong>확인이 필요한 값 {len(lack)}건</strong><span>'
+                        f"{esc(', '.join(items))}{' 등' if len(lack) > 4 else ''} — 문서끼리 값이 달라 보고서에 “확인 필요”로 "
+                        '적었어요. 자료 DB › 적재 현황·관리에서 고르면 다시 만들 때 반영돼요.</span></div>', unsafe_allow_html=True)
         pol = rep.get('polish')
         if pol and not pol['error'] and (pol['changed'] or pol['kept']):
             with st.expander(f"AI가 서식 규칙대로 고친 문장 {len(pol['changed'])}줄"):
@@ -979,10 +971,6 @@ def page_report():
                     st.markdown(f"- {esc(old)}  \n  ↺ 원래 문장 유지({esc(why)})")
         elif pol and pol['error']:
             st.caption(f"AI 문장 다듬기 실패 → 자동 작성 문장 그대로: {pol['error'][:120]}")
-        with st.container(border=True, key='card_form'):
-            form = st.selectbox('한글 문서 양식', [f for f in A04.FORMS if A04.FORMS[f][0] != 'press'], key='rp_form',
-                                help='회사 권장양식(보고서 작성 가이드라인)의 글꼴·제목 띠·기호 단계·간격으로 만듭니다.')
-            form_path = company_form_box(form)
 
     lay = A04.Layout(rep['blocks'], form, res3['facts'], district, rep['dept'], KINDS, form_path=form_path)
     safe = re.sub(r'[\\/:*?"<>|]', '_', lay.title)
@@ -990,7 +978,7 @@ def page_report():
     # 머리: 제목 + 다시 만들기 / 한글(hwpx)로 저장
     with head:
         h1, h2 = st.columns([2.2, 2.4], vertical_alignment='bottom')
-        h1.markdown(steps3(1) + f'<div class="rv-kicker" style="margin-top:10px">초안 검토 · {esc(district)}</div>'
+        h1.markdown(f'<div class="rv-kicker">초안 검토 · {esc(district)}</div>'
                     f'<div class="rv-h1">{esc(lay.title)}</div>', unsafe_allow_html=True)
         b1, b2, b3 = h2.columns([1, 1.5, 1])
         if b1.button('다시 만들기', width='stretch', help='DB의 최신 값으로 같은 설정의 초안을 다시 만듭니다.'):
@@ -1021,12 +1009,25 @@ def page_report():
                            file_name=f"자료표_{rep['stamp']}.xlsx",
                            mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
-    # 가운데: 보고서 미리보기
+    # 가운데: 보고서 미리보기 — 내려받는 파일을 PDF로 바꾼 쪽 그림(변환기가 없으면 화면용 미리보기)
     with mid:
-        with st.container(key='rv_doc'):
-            st.markdown(lay.html(), unsafe_allow_html=True)
-        st.caption('한글(hwpx)은 회사 양식 서식 파일에 그대로 채워 만들어요.' if lay.use_form else
-                   '이 양식의 회사 한글 서식이 없어 한글본은 기본 서식이에요 — 오른쪽 "회사 한글 양식 올리기"에서 올리면 회사 양식 그대로 나와요.')
+        with st.spinner('저장 파일을 PDF로 바꿔 미리보기를 만드는 중…'):
+            pdf, imgs, src = pdf_pages(hw, lay.preview_docx())
+        if imgs:
+            with st.container(key='rv_pdf'):
+                for i, png in enumerate(imgs):
+                    st.image(png, width='stretch', caption=f'{i + 1} / {len(imgs)}쪽')
+            c1, c2 = st.columns([3, 1], vertical_alignment='center')
+            c1.caption('한글 파일 그대로를 PDF로 바꾼 화면이에요.' if src == 'hwpx' else
+                       ('한글본과 같은 내용·서식으로 만든 워드 파일을 PDF로 바꾼 화면이에요. 이 서버에 한글 글꼴(휴먼명조 등)이 없으면 '
+                        '나눔 글꼴로 대신 보여서 줄바꿈이 조금 다를 수 있어요.')
+                       + ('' if lay.use_form else ' 회사 한글 양식이 없어 기본 서식이에요 — 세부 설정에서 회사 양식을 올리면 그 양식으로 나와요.'))
+            c2.download_button('PDF로 저장', pdf, file_name=f"{safe}_{rep['stamp']}.pdf", mime='application/pdf', width='stretch')
+        else:
+            with st.container(key='rv_doc'):
+                st.markdown(lay.html(), unsafe_allow_html=True)
+            st.caption('이 컴퓨터에는 PDF 변환기(LibreOffice)가 없어 화면용 미리보기로 보여 드려요. 클라우드에서는 저장 파일을 PDF로 바꿔 보여 줍니다.'
+                       + ('' if lay.use_form else ' 회사 한글 양식이 없어 한글본은 기본 서식이에요 — 세부 설정에서 회사 양식을 올리세요.'))
 
 
 
@@ -1067,30 +1068,43 @@ def ik_docs_from(path, kind):
 
 
 def ik_build(district, files):
-    """files: [(경로, 자료 종류)] → 분류된 문서 목록. 담당자가 이미 정한 것·적재한 것은 저장본을 따른다."""
-    facs = ik_facilities(district)
-    docs, basis = [], []
+    """files: [(경로, 자료 종류)] → 분류된 문서 목록. 담당자가 이미 정한 것·DB에 실제로 들어간 것은 저장본을 따른다."""
+    global CAT
+    docs = []
     for path, kind in files:
-        (basis if kind == K.KINDS[0] else docs).extend(ik_docs_from(path, kind))
+        docs.extend(ik_docs_from(path, kind))
+    basis = [d for d in docs if d['kind'] == K.KINDS[0]]  # 대책 보고서(기준정보 비교용, 표에도 함께 보임)
+    added = catalog.merge_found(district, [d['text'] for d in docs if d.get('text')])  # 문서에 나온 사업을 목록에 보탬
+    if added:
+        CAT = catalog.load(cfg)
+        flash(f"문서에서 사업 {len(added)}개를 찾아 {district} 사업 목록에 더했습니다: {', '.join(added)} "
+              "(적재 현황·관리 › 사업 목록·유형 고치기에서 수정 가능)")
+    facs = ik_facilities(district)
     with st.spinner('문서를 읽고 교통대책·내용을 분류하는 중…' + (' (AI가 확인 필요 문서를 추천하는 중)' if HAS_LLM else '')):
         n_ai = K.classify(docs, facs, district, use_llm=HAS_LLM, cfg=cfg)
     try:
         saved = {ik_key(s): s for s in json.loads(ik_register_path(district).read_text(encoding='utf-8'))}
     except Exception:
         saved = {}
+    in_db = {x['file'] for x in db.sources(con, district)}
     for d in docs:
         s = saved.get(ik_key(d))
         if s and s.get('status') in ('사람 결정', '적재 완료'):
+            s = dict(s)
+            if s['status'] == '적재 완료' and not (d.get('path') and Path(d['path']).name in in_db):
+                s['status'] = '사람 결정' if s.get('how') == '담당자' else d['status']  # 기록만 남고 DB엔 없으면 다시 적재 가능하게
             d.update({k: s[k] for k in ('facility', 'content', 'status', 'date') if s.get(k) is not None})
+        elif d.get('path') and Path(d['path']).name in in_db and d['status'] == '자동 확정':
+            d['status'] = '적재 완료'  # 이미 DB에 있는 문서
     # 문서마다 사업지구 확인: 다른 지구 문서로 보이면 확인 필요(그대로 적재되지 않게)
-    for d in docs + basis:
+    for d in docs:
         if not d.get('path'):
             continue
         r = catalog.detect_district(CAT, [Path(d['path']).name], [d.get('text') or ''])
         other = (r['known'] or r['name']) if r else None
         if other and other != district:
             d['other_district'] = other
-            if d in docs and d.get('status') != '적재 완료':
+            if d.get('status') != '적재 완료':
                 d['status'] = '확인 필요'
                 d['reason'] = (f"이 문서는 {other} 문서로 보입니다(근거: {r['evidence']}). "
                                f"사업지구를 바꾸거나, {district} 문서가 맞으면 이대로 결정하세요. " + (d.get('reason') or '')).strip()
@@ -1154,23 +1168,19 @@ def ik_stepper(cur):
 
 
 def ik_upload_cards(district, state):
-    """자료 종류별 올리기 칸 5개. 반환: [(경로, 종류)]"""
+    """올리기 칸 하나. 자료 종류(대책 보고서·고시문·내부 보고)는 파일 이름·내용으로 알아서 정한다. 반환: [(경로, 종류)]"""
     folder = UPLOADS / 'intake'  # 지구와 상관없이 한 곳(지구를 바꿔도 올린 파일이 남게)
-    files, cols = [], st.columns(len(INTAKE_KINDS))
-    for i, (col, kind) in enumerate(zip(cols, INTAKE_KINDS)):
-        n = len(state['basis']) if i == 0 else sum(d['kind'] == kind for d in state['docs'])
-        unit = '행' if kind == '문서관리대장' else ('장' if kind == '도면' else '건')
-        with card(col):
-            st.markdown(f'<div class="ik-up"><b>{kind}</b><span>{n}{unit}</span></div>'
-                        f'<div class="ik-uph">{K.KIND_HELP[kind]}</div>', unsafe_allow_html=True)
-            ups = st.file_uploader(kind, type=['xlsx', 'csv'] if kind == '문서관리대장' else [e[1:] for e in extract.FORMATS],
-                                   accept_multiple_files=True, key=f'ik_up_{i}', label_visibility='collapsed')
-            for f in ups or []:
-                folder.mkdir(parents=True, exist_ok=True)
-                p = folder / f.name
-                if not p.exists() or p.stat().st_size != f.size:
-                    p.write_bytes(f.getvalue())
-                files.append((str(p), kind))
+    files = []
+    with st.container(key='nw_drop'):
+        ups = st.file_uploader('파일을 업로드하세요', type=[e[1:] for e in extract.FORMATS], accept_multiple_files=True,
+                               key='ik_up_one', help='한글(hwpx)·워드·PDF·엑셀·텍스트, 여러 개를 한 번에 올릴 수 있습니다.')
+    for f in ups or []:
+        folder.mkdir(parents=True, exist_ok=True)
+        p = folder / f.name
+        if not p.exists() or p.stat().st_size != f.size:
+            p.write_bytes(f.getvalue())
+        kind = K.guess_kind(f.name)
+        files.append((str(p), kind if kind in INTAKE_KINDS else '내부 보고자료'))
     return files
 
 
@@ -1303,7 +1313,7 @@ def ik_load_db(district, state):
     """④ 확인된 자료 DB 적재: 파일이 있는 문서는 A01 값 추출 → A02 판정, 대장 행은 적재 기록만."""
     docs = state['docs']
     ready = [d for d in docs if d['status'] in ('자동 확정', '사람 결정')]
-    with_file = [d for d in ready if d.get('path')] + state['basis']
+    with_file = [d for d in ready if d.get('path')]
     n_vals = 0
     if with_file:
         metas = A01.describe([d['path'] for d in with_file], db.next_doc_num(con), CAT)
@@ -1331,8 +1341,7 @@ def page_intake():
         st.session_state['district'] = CAT['default'] if CAT['default'] in district_names else district_names[0]
     h1, h2 = st.columns([2, 3], vertical_alignment='bottom')
     with h1.container(key='ik_head'):
-        st.markdown('<div class="ik-cap">사업지구 <small>(문서를 올리면 자동으로 고릅니다)</small></div>', unsafe_allow_html=True)
-        district = st.selectbox('사업지구', district_names, key='district', label_visibility='collapsed')
+        district = st.selectbox('사업지구 · 문서를 올리면 자동으로 고릅니다', district_names, key='district')
     facs = ik_facilities(district)
     store = st.session_state.setdefault('ik', {})
     state = store.get(district, {'docs': [], 'basis': [], 'n_ai': 0, 'sig': ''})
@@ -1370,9 +1379,8 @@ def page_intake():
     h2.markdown(ik_stepper(cur), unsafe_allow_html=True)
     if not docs:
         with card():
-            st.markdown('<div class="ik-empty">자료 종류에 맞는 칸에 파일을 올리면, 문서마다 <b>어느 교통대책</b>의 '
-                        '<b>어떤 내용</b>인지 나누고 애매한 것만 사람에게 묻습니다.<br>'
-                        '<small>목록에 없는 새 사업지구는 🗂 적재 현황·관리 맨 아래 "새 사업지구 등록"에서 먼저 등록하세요.</small></div>',
+            st.markdown('<div class="ik-empty">파일을 올리면 사업지구를 알아서 고르고, 문서마다 <b>어느 교통대책</b>의 '
+                        '<b>어떤 내용</b>인지 나눕니다. 처음 보는 사업지구면 그 자리에서 등록합니다.</div>',
                         unsafe_allow_html=True)
             if INTAKE_SAMPLE.exists():  # 모의 자료는 누리마루지구 문서(올리면 지구가 자동으로 바뀜)
                 n_s = sum(K.guess_kind(p.name) in INTAKE_KINDS for p in INTAKE_SAMPLE.iterdir())
@@ -1413,7 +1421,7 @@ def page_intake():
             pick = None
         else:
             f1, f2 = st.columns([1, 1.2])
-            kinds = ['전체'] + [K.KIND_SHORT[k] for k in INTAKE_KINDS[1:]]
+            kinds = ['전체'] + [K.KIND_SHORT[k] for k in INTAKE_KINDS if any(d['kind'] == k for d in docs)]
             kf = f1.pills('자료', kinds, key='ik_kf', default='전체', label_visibility='collapsed') or '전체'
             sf = f2.pills('상태', ['모든 상태'] + K.STATUS, key='ik_sf', default='모든 상태', label_visibility='collapsed') or '모든 상태'
             idx = [j for j, d in enumerate(docs) if (kf == '전체' or K.KIND_SHORT[d['kind']] == kf)
@@ -1537,12 +1545,13 @@ def page_compare():
 
 # ---------------- 💾 DB ----------------
 def page_db():
-    st.markdown('<div class="nw-hero">' + steps3(0) + '<h1>자료만 올리세요.<br>보고서는 규칙대로 쓸게요.</h1>'
-                '<p>올린 자료를 교통대책별로 나눠 DB에 쌓고, 그 값으로 LH 개조식 규칙에 맞춘 초안과 서식 점검 결과를 보여 드려요.</p>'
+    st.markdown('<div class="nw-hero"><h1>자료만 올리세요.<br>보고서는 알아서 쓸게요.</h1>'
+                '<p>올린 자료를 교통대책별로 나눠 DB에 쌓고, 양식에 맞춘 보고서 초안을 작성해서 보여 드려요.</p>'
                 '</div>', unsafe_allow_html=True)
+    if st.session_state.get('db_view') not in DB_VIEWS:
+        st.session_state['db_view'] = DB_VIEWS[0]
     view = st.segmented_control('DB 보기', DB_VIEWS, key='db_view', label_visibility='collapsed') or DB_VIEWS[0]
-    st.markdown(f'<div class="db-help">{DB_HELP[view]}</div>', unsafe_allow_html=True)
-    {DB_VIEWS[0]: page_intake, DB_VIEWS[1]: page_docs, DB_VIEWS[2]: page_compare}[view]()
+    {DB_VIEWS[0]: page_intake, DB_VIEWS[1]: page_docs}[view]()
 
 
 # ---------------- 화면 전환 (상단 바: 디딤돌 로고 · 새 보고서 · 내 보고서 · 자료 DB · 서식 규칙) ----------------

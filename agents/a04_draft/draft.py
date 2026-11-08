@@ -23,8 +23,15 @@ TEMPLATE = Path(__file__).resolve().parents[2] / 'templates' / 'report_template.
 # ---------- 보고서 목차(섹션)와 양식 ----------
 # 블록: ('title', 제목, 부제) ('date', 문구) ('h', 대제목) ('b', 핵심어|None, 본문) ('s', 세부) ('act', 조치)
 #       ('table', 표 제목, 열 이름, 행 목록) ('note', 주석)
-SECTIONS = ['개요', '사업개요', '추진경위', '추진현황', '주요 변경사항', '주요 현안', '향후 계획', '참고(비공식)', '종합 의견(AI)']
+# 화면에서 고르는 목차(담당자가 고친 현안 보고서 구조, 2026-11-08): 본문 □ 3개 + 붙임 3개
+UI_SECTIONS = ['추진 현황 및 문제점', '대응 방향', '향후 계획', '붙임: 사업 개요', '붙임: 관계기관 쟁점', '붙임: 추진 경위·일정']
+SECTIONS = UI_SECTIONS + ['개요', '사업개요', '추진경위', '추진현황', '주요 변경사항', '주요 현안', '참고(비공식)', '종합 의견(AI)']
 SECTION_HELP = {
+    '추진 현황 및 문제점': '사업 현황 한 줄 + 사업별 현안·지연사유·바뀐 값(사업비·연장 등) + 문서 간 값이 다른 항목(확인 필요)',
+    '대응 방향': '사업별 대응방안·만회대책(없으면 현안이 있는 사업의 계획)',
+    '붙임: 사업 개요': '사업지구 개요 표(사업명·사업시행자·사업기간·총사업비)와 사업별 총괄표',
+    '붙임: 관계기관 쟁점': '쟁점별 관계기관 의견 표(문서에 쟁점이 있을 때)',
+    '붙임: 추진 경위·일정': '날짜별 추진 경위와 앞으로의 일정 표',
     '개요': '대상 사업·항목 수, 판정 기준 문서, 확정·확인 필요 건수',
     '사업개요': '사업별 주요 제원 표(연장·차로·규모·사업비·시기)와 사업비 합계',
     '추진경위': '문서 날짜순으로 각 문서가 새로 제시하거나 바꾼 값',
@@ -36,7 +43,7 @@ SECTION_HELP = {
     '종합 의견(AI)': 'AI가 초안을 읽고 쓰는 의견 2~3줄(키 필요, 숫자는 만들지 않음)',
 }
 PRESETS = {  # 보고서 종류: (기본 제목 꼬리, 기본 목차) — 지금은 현안 보고자료 하나만 만든다(2026-11-08)
-    '현안사항 보고': ('광역교통 현안사항 보고', ['사업개요', '추진경위', '주요 현안', '향후 계획']),
+    '현안사항 보고': ('광역교통 현안사항 보고', list(UI_SECTIONS)),
 }
 REPORT = '현안사항 보고'
 HEADINGS = {'주요 현안': '□ 주요 현안 및 대응방안', '참고(비공식)': '□ 참고(비공식 자료, 반영 안 함)',
@@ -130,6 +137,33 @@ def _ev_date(d):
     return f'’{m.group(1)}년 {m.group(2)}'.strip() if m else (d or '')
 
 
+def _ev_key(d):
+    m = re.match(r'(\d{4})(?:\.(\d{1,2}))?(?:\.(\d{1,2}))?\s*(상반기|하반기)?', d or '')
+    if not m:
+        return (9999, 99, 99)
+    mon = int(m.group(2)) if m.group(2) else {'상반기': 6, '하반기': 12}.get(m.group(4), 0)
+    return (int(m.group(1)), mon, int(m.group(3) or 0))
+
+
+def _jong(w):
+    """마지막 글자 받침: 0 없음, 8 ㄹ, 그 밖은 받침 있음(한글이 아니면 0)"""
+    c = (w or ' ')[-1]
+    return (ord(c) - 0xAC00) % 28 if '가' <= c <= '힣' else 0
+
+
+def _ro(w):  # 으로/로
+    return w + ('으로' if _jong(w) not in (0, 8) else '로')
+
+
+def _eun(w):  # 은/는
+    return w + ('은' if _jong(w) else '는')
+
+
+def _dv(v, unit):
+    """변경 줄의 값 표기: 2030.12 → ’30.12월, 나머지는 단위를 붙여서"""
+    return _ym(v) if re.fullmatch(r'20\d{2}\.\d{1,2}', str(v)) else fmt_value(v, unit)
+
+
 def build(facts, cands, sources, choices, title='', district='', dept='', sections=None, extra=None,
           use_llm=False, cfg=None, order=None, kinds=None, show_basis=False, events=None, report_date=None):
     """sections: 넣을 목차 이름 목록(SECTIONS 순서로 배치). extra: {목차 이름: 직접 입력 텍스트}.
@@ -195,9 +229,93 @@ def build(facts, cands, sources, choices, title='', district='', dept='', sectio
           '디딤돌 자동 작성 초안(검토 전)' if show_basis else ''),
          ('date', f"<{short_date(today.strftime('%Y-%m-%d'))} {dept or '담당부서'}>")]
 
+    att, used_plan = 0, set()
+    issues_k, delays_k, remedies_k, plans_k = of_kind('issue'), of_kind('delay'), of_kind('remedy'), of_kind('plan')
     for sec in sections:
         body = []
-        if sec == '개요':
+        if sec == '추진 현황 및 문제점':
+            costs = [float(f['value']) for f in facts if f['item'] == '사업비' and f['value'] is not None
+                     and re.fullmatch(r'\d+(\.\d+)?', str(f['value']))]
+            total = fmt_value(dist['총사업비']['value'], '억원') if '총사업비' in dist else \
+                (fmt_value(str(int(sum(costs))), '억원') if costs else '')
+            line_ = f"{dist['지구명칭']['value'] if '지구명칭' in dist else district} 광역교통개선대책 {len(by_fac)}개 사업" \
+                + (f', 총사업비 {total}' if total else '') + (f", 최초 입주 {_ym(dist['최초입주']['value'])} 예정" if '최초입주' in dist else '')
+            body.append(('b', '사업 현황', line_))
+            for fac in by_fac:
+                chg = []
+                for f in by_fac[fac]:  # 바뀐 값(주요 변경사항을 여기에 녹임): 처음 공식 문서 값 → 지금 값
+                    if narr(f['item']) or kinds.get(f['item']) in ('attr', 'status') or f['value'] is None:
+                        continue
+                    off = sorted((c for c in by_key.get((f['facility'], f['item']), []) if c['stage'] not in INFORMAL),
+                                 key=lambda c: (c['date'], c['doc_id']))
+                    o0 = norm(off[0]['value']) if off else ''
+                    if off and o0 != norm(f['value']) and not (o0 and o0 in norm(f['value'])) and f['status'] != '미확정(충돌)':
+                        chg.append(f"{SPEC_LABEL.get(f['item'], f['item'])} {_dv(off[0]['value'], f['unit'])} → "
+                                   f"{_dv(f['value'], f['unit'])}")
+                if fac not in issues_k and fac not in delays_k and not chg:
+                    continue
+                if fac in issues_k:
+                    head, rest = _split(issues_k[fac]['value'])
+                    body.append(('b', fac, head))
+                    body += [('s', r) for r in rest]
+                elif fac in delays_k:
+                    body.append(('b', fac, gaejo(delays_k[fac]['value'])))
+                else:
+                    body.append(('b', fac, _ro(', '.join(chg[:3])) + ' 변경'))
+                    chg = []
+                if fac in delays_k and fac in issues_k:
+                    body.append(('s', f"(지연사유) {gaejo(delays_k[fac]['value'])}"))
+                if chg:
+                    body.append(('s', _ro(', '.join(chg[:3])) + ' 변경'))
+            for f in pending:
+                tops = json.loads(f['conflict_candidates'] or '[]')
+                cand = ' / '.join(OrderedDict.fromkeys(fmt_value(c['value'], f['unit']) for c in tops))
+                body.append(('b', f"{f['facility']} {f['item']}", f'관계기관 문서 간 값 상이({cand}), 확인 필요'))
+
+        elif sec == '대응 방향':
+            for fac in by_fac:
+                if fac in remedies_k:
+                    head, rest = _split(remedies_k[fac]['value'])
+                    body.append(('b', fac, head))
+                    body += [('s', r) for r in rest]
+                elif (fac in issues_k or fac in delays_k) and fac in plans_k:  # 대응방안이 따로 없으면 현안 사업의 계획
+                    head, rest = _split(plans_k[fac]['value'])
+                    body.append(('b', fac, head))
+                    body += [('s', r) for r in rest]
+                    used_plan.add(fac)
+            if pending:  # 문서 간 값이 다른 항목: 한 줄로(항목마다 되풀이하지 않음)
+                names = [f"{f['facility']} {f['item']}" for f in pending]
+                more = f' 등 {len(names)}건' if len(names) > 3 else ''
+                body.append(('b', '확인 필요', _eun(', '.join(names[:3]) + more) + ' 원문 대조 후 확정'))
+            body = body or [('b', None, '문서에서 대응방안·만회대책을 찾지 못함')]
+
+        elif sec == '붙임: 관계기관 쟁점':
+            # 쟁점마다 관계기관 의견 줄 + LH 의견(대응방안) 칸(담당자가 고친 보고서 붙임 표 모양)
+            groups = OrderedDict()
+            for e in [e for e in events if e['kind'] == '쟁점']:
+                m = re.match(r'\[(.+?)\]\s*([^:：]+)[:：]\s*(.+)$', e['content'])
+                if m:
+                    fac = e['facility'] if e['facility'] != DISTRICT_FAC else '지구 공통'
+                    g = groups.setdefault((fac, m.group(1).strip()), {'org': [], 'lh': []})
+                    who, say = m.group(2).strip(), m.group(3).strip()
+                    is_lh = re.search(r'LH|토지주택|사업본부', who) or (dept and who == dept)
+                    g['lh' if is_lh else 'org'].append((who, say))
+            rows = []
+            for (fac, issue), g in groups.items():
+                lh = ' / '.join(x[1] for x in g['lh']) or '-'
+                for i, (who, say) in enumerate(g['org'] or [('-', '-')]):
+                    rows.append([fac, issue if i == 0 else '', who, say, lh if i == 0 else ''])
+            one = len({r[0] for r in rows}) <= 1
+            body = [('table', '주요 쟁점별 관계기관 의견', ([] if one else ['사업']) + ['쟁점', '관계기관', '의견', 'LH 의견(대응방안)'],
+                     [r[1:] if one else r for r in rows])] if rows else []
+
+        elif sec == '붙임: 추진 경위·일정':
+            evs = sorted([e for e in events if e['kind'] in ('경위', '계획')], key=lambda e: _ev_key(e['date']))
+            rows = [[_ev_date(e['date']), '실적' if e['kind'] == '경위' else '계획',
+                     '지구 공통' if e['facility'] == DISTRICT_FAC else e['facility'], e['content']] for e in evs][-24:]
+            body = [('table', '추진 경위 및 일정', ['시기', '구분', '사업', '내용'], rows)] if rows else []
+
+        elif sec == '개요':
             dates = sorted(s['date'] for s in sources if s['date'])
             body = [('b', '대상', f'{district} 광역교통개선대책 {len(by_fac)}개 사업')]
             if show_basis:
@@ -213,7 +331,7 @@ def build(facts, cands, sources, choices, title='', district='', dept='', sectio
                 if pending:
                     body.append(('b', '확인 필요', ', '.join(f"{f['facility']} {f['item']}" for f in pending)))
 
-        elif sec == '사업개요':
+        elif sec in ('사업개요', '붙임: 사업 개요'):
             # 열 합치기(A4 한 장 폭): 개통목표 → 완료(개통), 지원액 → 사업비. 수치 열 다음에 시행주체·추진상태
             merge = {'개통목표': '완료시기', '지원액': '사업비'}
             label = {'완료시기': '완료(개통)', '사업비': '사업비(억원)'}
@@ -250,6 +368,12 @@ def build(facts, cands, sources, choices, title='', district='', dept='', sectio
                       + (f", 사업비 합계 {fmt_value(str(int(sum(costs))) if sum(costs).is_integer() else str(sum(costs)), '억원')}"
                          f"({len(costs)}개 사업 기준)" if costs and not total else '')),
                      ('table', '사업개요', cols, rows)]
+            if sec == '붙임: 사업 개요':  # 붙임: 사업지구 개요 표 + 사업별 총괄표(문장 줄 없이)
+                info_rows = [[k, dist[i]['value'] if i not in ('총사업비',) else fmt_value(dist[i]['value'], '억원')]
+                             for k, i in (('사 업 명', '지구명칭'), ('사업시행자', '사업시행자'), ('개선대책 수립', '대책수립일'),
+                                          ('시행시기', '대책시행시기'), ('최초 입주', '최초입주'), ('총사업비', '총사업비')) if i in dist]
+                body = ([('table', f"{dist['지구명칭']['value'] if '지구명칭' in dist else district} 사업개요", ['구 분', '내 용'], info_rows)]
+                        if info_rows else []) + ([('table', '광역교통개선대책 총괄', cols, rows)] if items else [])  # 값 열이 없으면 표를 뺌
 
         elif sec == '추진경위' and any(e['kind'] == '경위' for e in events) and not show_basis:
             # DB의 추진경위 목록(문서에 날짜와 함께 적힌 실적): 지구 전체 → 사업별, 날짜순, 사업마다 최근 6건
@@ -415,20 +539,21 @@ def build(facts, cands, sources, choices, title='', district='', dept='', sectio
         elif sec == '향후 계획':
             plans = of_kind('plan')
             sched = [e for e in events if e['kind'] == '계획']
-            for fac in [x for x in by_fac if x in plans or any(e['facility'] == x for e in sched)]:
-                f = plans.get(fac)
+            for fac in [x for x in by_fac if (x in plans and x not in used_plan) or any(e['facility'] == x for e in sched)]:
+                f = plans.get(fac) if fac not in used_plan else None
                 evs = [e for e in sched if e['facility'] == fac]
                 if f:
                     head, rest = _split(f['value'])
                     body.append(('b', fac, head))
                     body += [('s', r) for r in rest]
-                else:
-                    body.append(('b', fac, ''))
+                elif evs:  # 계획 문장이 없으면 첫 일정을 사업 줄에 바로 씀: ㅇ (사업) ’28. 下 ○○ 완료
+                    body.append(('b', fac, f"{_ev_date(evs[0]['date'])} {gaejo(evs[0]['content'])}"))
+                    evs = evs[1:]
                 body += [('s', f"({_ev_date(e['date'])}) {gaejo(e['content'])}") for e in evs[:4]
                          if not f or re.sub(r'\s', '', e['content'])[:12] not in re.sub(r'\s', '', f['value'])]
                 if f and show_basis:
                     body.append(('s', f"근거: {basis(f)}"))
-            for f in pending:
+            for f in (pending if '대응 방향' not in sections else []):
                 body.append(('b', '확인', f"{f['facility']} {f['item']} 원문 확인 후 확정 예정"))
             if not plans and not sched:  # 문서에 향후계획·일정이 없을 때만 완료·개통 예정 시기로 대신함
                 timing = [f for f in facts if f['value'] is not None and re.fullmatch(r'\d{4}\.\d{1,2}', str(f['value']))
@@ -437,7 +562,7 @@ def build(facts, cands, sources, choices, title='', district='', dept='', sectio
                     names = [f"{f['facility']} {SPEC_LABEL.get(f['item'], f['item'])}" for f in timing if str(f['value']) == v]
                     body.append(('b', _ym(v), ', '.join(names) + ' 예정'))
             body += _user_lines(extra.get(sec))
-            body = body or [('b', None, '(직접 입력)')]
+            body = body or [('b', None, '문서에서 향후 계획·일정을 찾지 못함')]
 
         elif sec == '참고(비공식)':
             for f, c in informal:
@@ -451,7 +576,13 @@ def build(facts, cands, sources, choices, title='', district='', dept='', sectio
         elif sec == '종합 의견(AI)':
             body = llm_opinion(B, cfg) if use_llm else [('b', None, 'AI 미사용(API 키가 있을 때 작성)')]
 
-        B += [('h', HEADINGS.get(sec, f'□ {sec}'))] + body
+        if sec.startswith('붙임:'):
+            if not body:  # 문서에 내용이 없는 붙임은 뺀다(빈 붙임을 보고서에 남기지 않음)
+                continue
+            att += 1
+            B += [('h', f"붙임 {att} {sec.split(':', 1)[1].strip()}")] + body
+        else:
+            B += [('h', HEADINGS.get(sec, f'□ {sec}'))] + body
     if show_basis:
         B.append(('note', '주) 근거는 출처 문서(문서ID). 판정 근거·변경 이력은 디딤돌 DB 화면에서 확인. '
                           '본 초안은 자동 작성본으로 담당자 검토 후 사용'))

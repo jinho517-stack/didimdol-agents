@@ -131,7 +131,8 @@ def main():
     for must in ('□ 개요', '□ 사업개요', '□ 추진현황', '□ 주요 변경사항', '□ 주요 현안 및 대응방안', '⇒ (대응방안)',
                  '12,000㎡', '4,650억원', '0.6km → 0.8km', '2031.12(D06', '2032.6(D06b', '8,000㎡'):
         assert must in text, must
-    tail, secs = draft.PRESETS['현안사항 보고']
+    tail = draft.PRESETS['현안사항 보고'][0]
+    secs = ['사업개요', '추진경위', '주요 현안', '향후 계획']  # 예전 목차 이름도 계속 작동
     t2 = draft.to_text(draft.build(db.facts(con), db.load_candidates(con), db.sources(con), db.choices(con),
                                    '누리마루지구 ' + tail, '누리마루지구', '', secs,
                                    {'향후 계획': '(협의) 제21차 실무협의체 개최\n- 11월 예정'}, order=order,
@@ -342,8 +343,9 @@ def main():
                           'date': (K.date_in_text(t, kind) or m['date']) if kind == '고시문' else (m['date'] or K.date_in_text(t, kind))})
     K.classify(kdocs, facs, '누리마루지구')
     by = {d['title'][:12]: d for d in kdocs}
-    assert by['광역교통시설 분담금 3분기'[:12]]['status'] == '확인 필요' and '3개' in by['광역교통시설 분담금 3분기'[:12]]['reason']
-    assert by['현장 안전점검 결과 보고(1'[:12]]['facility'] == K.COMMON  # 대책 이름이 없으면 공통 + 확인 필요
+    # 대책 3개 이상을 함께 다루는 종합 자료·대책 이름이 없는 자료는 '공통'(2026-11-08 규칙: 내부 보고자료가 다 철도로 가던 문제)
+    assert by['광역교통시설 분담금 3분기'[:12]]['facility'] == K.COMMON, by['광역교통시설 분담금 3분기'[:12]]
+    assert by['현장 안전점검 결과 보고(1'[:12]]['facility'] == K.COMMON
     g = next(d for d in kdocs if d['title'].startswith('가온방면 연결도로 공사 10월'))
     assert (g['facility'], g['content'], g['status']) == ('가온방면 연결도로', '공사', '자동 확정'), g
     n = next(d for d in kdocs if d['kind'] == '고시문')
@@ -385,9 +387,23 @@ def main():
                   order=catalog.order(CAT, '누리마루지구'), kinds=CAT['kinds'], events=ev4)
     t4 = draft.to_text(b44)
     for must in ('개선대책 총사업비 9,010억원', '최초 입주 ’31.12월 예정', '착공 2029년', '예상 완료 2032년', '민자 적격성조사 철회 후',
-                 '(만회대책) 대안 비교·검토', '(’25.6월) 공동사업시행자 기본협약 체결', '(’28. 下) 공기업 예비타당성 조사 완료', '내용을 보고 드림'):
+                 '(만회대책) 대안 비교·검토', '(’25.6월) 공동사업시행자 기본협약 체결', '’28. 下 공기업 예비타당성 조사 완료', '내용을 보고 드림'):
         assert must in t4, (must, t4)
     assert '지구 공통' not in t4  # 지구 공통은 사업 줄로 나오지 않음
+    new = A04.PRESETS['현안사항 보고'][1]
+    b45 = A04.run(r34, db.load_candidates(con4, '누리마루지구'), db.sources(con4, '누리마루지구'),
+                  db.choices(con4, '누리마루지구'), '시험', '누리마루지구', '', new,
+                  order=catalog.order(CAT, '누리마루지구'), kinds=CAT['kinds'], events=ev4)
+    t5 = draft.to_text(b45)
+    for must in ('□ 추진 현황 및 문제점', '□ 대응 방향', '□ 향후 계획', '붙임 1 사업 개요', '붙임 2 추진 경위·일정', '(사업 현황)', '내용을 보고 드림'):
+        assert must in t5, (must, t5)
+    for bad in ('□ 개요', '□ 주요 변경사항', '□ 참고', '(직접 입력)', '붙임 3', '주요 수치 변경', '4차로 → 4→6'):
+        assert bad not in t5, (bad, t5)
+    chk5 = A04.check(b45, r34, db.load_candidates(con4, '누리마루지구'), new, ev4)
+    assert all(c['결과'] == '통과' for c in chk5 if c['점검'] != '미확정 표시'), chk5
+    sty = A04.lh_style.restyle(b45, '1쪽 보고서')
+    assert [b[1] for b in sty if b[0] == 'att'] == ['붙임 1', '붙임 2']  # 쟁점이 없으면 그 붙임은 빠짐
+    assert A04.Layout(b45, '1쪽 보고서', r34['facts'], '누리마루지구', '', CAT['kinds']).hwpx()[:2] == b'PK'
     chk4 = A04.check(b44, r34, db.load_candidates(con4, '누리마루지구'), secs4, ev4)
     assert all(c['결과'] == '통과' for c in chk4 if c['점검'] != '미확정 표시'), chk4
     con4.close()

@@ -62,7 +62,7 @@ def restyle(blocks, form):
     except ValueError:
         rd = None
     summary = next((b[1] for b in blocks if b[0] == 'summary'), '')
-    heads = [re.sub(r'^□\s*', '', b[1]) for b in blocks if b[0] == 'h']
+    heads = [re.sub(r'^□\s*', '', b[1]) for b in blocks if b[0] == 'h' and not b[1].startswith('붙임')]
     out = []
     if kind == 'cover':
         out += [('cover', title, lh_date(rd, short=False).rsplit('.', 2)[0] + '.', dept), ('pagebreak',),
@@ -76,7 +76,10 @@ def restyle(blocks, form):
     n = 0
     for b in blocks:
         k = b[0]
-        if k == 'h':
+        if k == 'h' and b[1].startswith('붙임'):  # 붙임 N 제목: 새 쪽에서 시작(담당자가 고친 보고서 모양)
+            m = re.match(r'(붙임\s*\d+)\s*(.*)', b[1])
+            out.append(('att', m.group(1), m.group(2)) if m else ('att', b[1], ''))
+        elif k == 'h':
             n += 1
             name = re.sub(r'^□\s*', '', b[1])
             if kind == 'cover':
@@ -145,6 +148,9 @@ CSS = """<style>
 .lh{background:#fff;color:#111;border:1px solid #c9c9c9;padding:30px 34px;max-width:860px;line-height:1.6;
     font-family:'휴먼명조','HCR Batang','Batang',serif;font-size:15px}
 .lh .hd{font-family:'HY헤드라인M','Malgun Gothic',sans-serif;font-weight:700}
+.lh .att{font-size:15pt;margin:4px 0 12px}.lh .attn{display:inline-block;border:1px solid #333;padding:1px 8px;margin-right:6px}
+.lh .pgbr{border-top:2px dashed #c9c6bd;margin:26px -8px 18px;position:relative}
+.lh .pgbr:after{content:'쪽 나눔';position:absolute;right:0;top:-10px;font:11px sans-serif;color:#999;background:#fff;padding:0 4px}
 .lh .ttl{text-align:center;font-size:22px;padding:6px 0;margin-bottom:4px}
 .lh .dl{text-align:right;font-size:14px;margin-bottom:12px}
 .lh .sum{background:#fffbe6;border-top:1px solid #333;border-bottom:1px solid #333;padding:9px 12px;margin:6px 0 14px}
@@ -191,13 +197,15 @@ def to_html(blocks, form):
             o.append(f'<div class="hd ttl" style="{bars(color)}">{e(b[1])}</div>')
         elif k == 'head1p':
             o.append(f'<div class="h1p"><div>{e(b[2])}</div><div class="hd t">{e(b[1])}</div>'
-                     f'<div><span>담당 &nbsp;부장 ____ / 차장 ____</span><span>{e(b[3])}</span></div></div>')
+                     f'<div><span>담당 &nbsp;처장 ____ / 팀장 ____</span><span>{e(b[3])}</span></div></div>')
         elif k == 'dateline':
             o.append(f'<div class="dl">{e(b[1])}</div>')
         elif k == 'summary':
             o.append(f'<div class="sum">◈ {e(b[1])}</div>')
         elif k == 'mid':
             o.append(f'<div class="hd mid">{e(b[1])}. {e(b[2])}</div>')
+        elif k == 'att':
+            o.append(f'<div class="pgbr"></div><div class="hd att"><span class="attn">{e(b[1])}</span> {e(b[2])}</div>')
         elif k == 'big':
             o.append(f'<div class="hd big">{e(b[1])}. {e(b[2])}</div>')
         elif k == 'sq':
@@ -247,6 +255,7 @@ def skill_css():
             f".lh table:not(.ct2){{font-size:{t['font_pt']:g}px;letter-spacing:{t['char_spacing'] / 100:g}em;"
             f"border-top:{t['outer_line_mm'] * 4:g}px solid {line};border-bottom:{t['outer_line_mm'] * 4:g}px solid {line}}}"
             f".lh table:not(.ct2) td,.lh table:not(.ct2) th{{border:1px solid {line};white-space:nowrap}}"
+            ".lh table:not(.ct2) td{white-space:normal;word-break:keep-all}.lh table:not(.ct2){table-layout:auto;width:100%}"
             ".lh table:not(.ct2) tr>:first-child{border-left:0}.lh table:not(.ct2) tr>:last-child{border-right:0}"
             f".lh table:not(.ct2) th{{background:#{t['header_fill']};border-bottom:3px double {line}}}"
             '</style>')
@@ -364,7 +373,7 @@ def to_docx(blocks, form):
             t.alignment = WD_TABLE_ALIGNMENT.CENTER
             cell_text(t.cell(0, 0), b[2], 13)
             cell_text(t.cell(0, 1), b[1], 20, name=HEAD)
-            cell_text(t.cell(0, 2), '담당  부장 ____\n         차장 ____', 11)
+            cell_text(t.cell(0, 2), '담당  처장 ____\n         팀장 ____', 11)
             t.cell(0, 2).add_paragraph().add_run(b[3]).font.size = Pt(11)
             for c, w in zip(t.rows[0].cells, (Mm(35), Mm(100), Mm(35))):
                 c.width = w
@@ -376,6 +385,9 @@ def to_docx(blocks, form):
             shade(p._p.get_or_add_pPr(), 'FFFBE6')
         elif k == 'mid':
             para(f'{b[1]}. {b[2]}', HEAD, 15, before=14)
+        elif k == 'att':
+            d.add_paragraph().add_run().add_break(WD_BREAK.PAGE)
+            para(f'{b[1]}  {b[2]}', HEAD, 15, before=0)
         elif k == 'big':
             p = para(f'{b[1]}. {b[2]}', HEAD, 18, before=16)
             border(p, 'bottom', 12, '333333')
@@ -491,6 +503,8 @@ def to_text(blocks):
             out.append('◈ ' + b[1])
         elif k in ('mid', 'big'):
             out.append(f'{b[1]}. {b[2]}')
+        elif k == 'att':
+            out.append(f'{b[1]} {b[2]}')
         elif k == 'sq':
             out.append('□ ' + (f'({b[1]}) {b[2]}' if b[1] and b[2] else (b[1] or b[2])))
         elif k in sym:

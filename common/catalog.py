@@ -34,11 +34,38 @@ def save_local_district(name, facilities, key=None):
 RAIL_WORDS = re.compile(r'철도|전철|지하철|경전철|GTX|트램', re.I)
 
 
+GENERIC = {'철도', '도로', '환승', '환승시설', '대중교통', '접속시설', '연결도로', '도로확장', '확장', '광역철도', '광역도로',
+           '버스', '광역교통', '광역교통시설', '사업', '공통', '신설', '개선', '교차로', '철도사업', '도로사업'}
+
+
+def is_generic(name):
+    """사업 이름이 아니라 분야·일반 낱말인지(예: '철도', '연결도로', '도로·대중교통')"""
+    n = re.sub(r'\s', '', name or '')
+    return len(n) < 3 or n in GENERIC or all(p in GENERIC for p in re.split(r'[·,/및]', n) if p)
+
+
+def merge_found(district, texts):
+    """올린 문서에서 찾은 사업 중 등록 목록에 없는 것을 화면 등록 지구에 더한다(기본 지구는 그대로). 반환: 더한 사업 이름들"""
+    local = {d['name']: d for d in local_districts()}
+    if district not in local:
+        return []
+    cur = [f for f in _repair(local[district])['facilities']]
+    def same(a, b):
+        a, b = re.sub(r'\s|\(.*?\)', '', a), re.sub(r'\s|\(.*?\)', '', b)
+        return a == b or a in b or b in a
+    add = [s for s in suggest_facilities(texts) if not is_generic(s['name']) and not any(same(s['name'], f['name']) for f in cur)]
+    if add or len(cur) != len(local[district].get('facilities', [])):
+        save_local_district(district, cur + add, key=local[district].get('key'))
+    return [s['name'] for s in add]
+
+
 def _repair(d):
     """화면에서 등록한 지구: 예전 유형 추정 오류('개선'·'n호선' 등을 철도로 봄)로 저장된 '철도'를 바로잡는다.
     이름에 철도라는 말이 없고 지금 규칙으로는 철도가 아니면 지금 규칙의 유형으로 본다(담당자가 고친 값은 '철도' 외에는 그대로)."""
     facs = []
     for f in d.get('facilities', []):
+        if is_generic(f['name']):  # '철도'·'연결도로'처럼 사업 이름이 아닌 낱말은 뺀다
+            continue
         t = f.get('type')
         if t == '철도' and not RAIL_WORDS.search(f['name']):
             g = facility_type({'types': {}}, '', f['name'])
@@ -217,7 +244,7 @@ def suggest_facilities(texts):
                     seen[c.strip()] = seen.get(c.strip(), 0) + 1
     out = []
     for name, _ in sorted(seen.items(), key=lambda x: -x[1]):
-        if not any(name != o and name in o for o in seen):  # 더 긴 이름이 있으면 그쪽
+        if not any(name != o and name in o for o in seen) and not is_generic(name):  # 더 긴 이름 우선, 일반 낱말 제외
             out.append({'name': name, 'type': facility_type({'types': {}}, '', name)})
     return out[:12]
 

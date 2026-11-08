@@ -19,7 +19,7 @@ KIND_HELP = {'광역교통개선대책 보고서': '사업 개요와 대책 목�
              '내부 보고자료': '주간·월간·현안 보고 등 내부 보고 문서'}
 CONTENTS = ['설계', '인허가', '보상', '공사', '협의·민원', '사업비 집행', '공통']
 STAGE4 = ['설계', '인허가', '보상', '공사']  # 사업 진행 단계(왼쪽 목록의 막대)
-COMMON = '공통 · 대책 무관'
+COMMON = '공통 · 여러 대책'  # 특정 대책 하나가 아닌 자료(종합 보고·대책 무관)
 STATUS = ['확인 필요', '자동 확정', '사람 결정', '적재 완료']
 # 내용 낱말: 위에서부터 먼저 맞는 것
 CONTENT_KW = [('사업비 집행', ('분담금', '정산', '집행', '예산', '지급')),
@@ -133,17 +133,29 @@ def date_in_text(text, kind):
 def rule(doc, facilities):
     """규칙 분류 한 건. doc: {'title','text','date','kind'} → doc에 facility·content·status·reason·options를 채워 돌려준다."""
     head = doc['title']
-    found = mentions(head, facilities) or mentions(doc.get('text', '')[:3000], facilities)
-    content = content_of(head) if content_of(head) != '공통' else content_of(doc.get('text', '')[:1500])
-    reasons = []
-    if len(found) == 1:
-        fac = found[0]
-    elif not found:
-        fac = COMMON
-        reasons.append('제목·본문에서 교통대책 이름을 찾지 못했습니다. 공통 자료인지, 어느 대책인지 정해 주세요.')
-    else:
-        fac = COMMON if content in ('사업비 집행', '공통') else found[0]
-        reasons.append(f'한 문서에 대책 {len(found)}개가 함께 나옵니다. 하나로 정할지, 공통으로 둘지 정해 주세요.')
+    body = doc.get('text', '')[:8000]
+    in_title = mentions(head, facilities)
+    found = list(dict.fromkeys(in_title + mentions(body, facilities)))
+    content = content_of(head) if content_of(head) != '공통' else content_of(body[:1500])
+    reasons, why = [], ''
+    al, nb = _aliases(facilities), _ns(body)
+    count = {f: max(nb.count(a) for a in al[f]) for f in found}  # 본문에 나온 횟수(가장 긴 이름 기준)
+    if len(in_title) == 1:  # 제목에 대책 하나 → 그 대책
+        fac, why = in_title[0], '제목에 나온 대책'
+    elif not found:  # 대책 이름이 없음 → 공통 자료(지구 전체·제도·일반 협의 등)
+        fac, why = COMMON, '대책 이름이 없는 공통 자료'
+    elif len(found) == 1:
+        fac, why = found[0], '본문에 나온 대책'
+    elif len(found) >= 3:  # 여러 대책을 함께 다루는 종합 보고(추진현황·실무협의체 등)
+        fac, why = COMMON, f'대책 {len(found)}개를 함께 다루는 종합 자료'
+    else:  # 2개: 본문에 더 많이 나온 대책, 같으면 사람에게
+        a, b = sorted(found, key=lambda f: -count[f])
+        if count[a] > count[b]:
+            fac, why = a, f'본문에 더 많이 나온 대책({count[a]}회 대 {count[b]}회)'
+        else:
+            fac = a
+            reasons.append(f'대책 2개({a}, {b})가 같은 비중으로 나옵니다. 하나로 정할지, 공통으로 둘지 정해 주세요.')
+    doc['why_rule'] = why
     if not doc.get('date'):
         reasons.append('날짜를 파일명·본문에서 찾지 못했습니다. 날짜를 확인해 주세요.')
     doc.update(facility=fac, content=content, mentions=found, options=list(dict.fromkeys([fac] + found + [COMMON])),

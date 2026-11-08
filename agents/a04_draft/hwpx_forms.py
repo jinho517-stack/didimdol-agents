@@ -442,6 +442,8 @@ def _emit(b, roles, gaps, kind, F=None):
     """양식 블록 하나 → 문단들(앞 띄움 포함)."""
     k = b[0]
     gap = gaps.get(k, '')
+    if k == 'att' and 'sq' in roles:  # 붙임 N 제목: □ 문단 서식을 빌려 새 쪽에서 시작
+        return [_page_break(_fill(roles['sq'], ['', f'{b[1]}  ', b[2]]), True)]
     if k == 'sq' and 'sq' in roles:
         if kind == 'press':
             return [gap, _fill(roles['sq'], ['□ ', '', b[2] or b[1] or '', '', '', ''])]
@@ -529,7 +531,7 @@ def render(styled, form, form_path=None):
         i_sum = F.find(lambda t: t.startswith('◈'))
         roles, gaps = _body_roles(F, i_sum)
         h = next(b for b in styled if b[0] == 'head1p')
-        out.append(_fill(F.segs[0], [' ', h[1], '', '담', '당', '부장', '차장', h[3], h[2]]))
+        out.append(_fill(F.segs[0], [' ', h[1], '', '담', '당', '처장', '팀장', h[3], h[2]]))
         out += F.segs[1:i_sum]
         for b in styled:
             if b[0] == 'summary':

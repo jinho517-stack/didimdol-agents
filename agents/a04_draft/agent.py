@@ -93,7 +93,9 @@ def check(blocks, a03, cands=(), sections=(), events=()):
 
     # 3) 필수 항목: 고른 목차가 모두 들어갔는지
     heads = {b[1] for b in blocks if b[0] == 'h'}
-    miss = [s for s in sections if draft.HEADINGS.get(s, f'□ {s}') not in heads]
+    labels = {re.sub(r'^붙임\s*\d+\s*', '', h) for h in heads}
+    miss = [s for s in sections if draft.HEADINGS.get(s, f'□ {s}') not in heads
+            and not s.startswith('붙임:')]  # 붙임은 문서에 내용이 있을 때만 붙음
     out.append({'점검': '필수 항목(목차)', '결과': '확인 필요' if miss else '통과',
                 '설명': ('빠진 목차: ' + ', '.join(miss)) if miss else f'고른 목차 {len(sections)}개 모두 있음'})
 
@@ -151,3 +153,7 @@ class Layout:
 
     def html(self):
         return lh_style.to_html(self.styled, self.form) if self.styled else draft.to_html(self.blocks)
+
+    def preview_docx(self):
+        """미리보기(PDF)용 워드: 한글본과 같은 모양으로. 회사 양식이 없어 한글본이 기본 서식이면 워드도 기본 서식."""
+        return self.docx() if self.use_form else draft.to_docx(self.hwpx_blocks)
