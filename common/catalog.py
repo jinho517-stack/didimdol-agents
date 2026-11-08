@@ -31,10 +31,26 @@ def save_local_district(name, facilities, key=None):
     LOCAL.write_text(yaml.safe_dump(ds, allow_unicode=True, sort_keys=False), encoding='utf-8')
 
 
+RAIL_WORDS = re.compile(r'철도|전철|지하철|경전철|GTX|트램', re.I)
+
+
+def _repair(d):
+    """화면에서 등록한 지구: 예전 유형 추정 오류('개선'·'n호선' 등을 철도로 봄)로 저장된 '철도'를 바로잡는다.
+    이름에 철도라는 말이 없고 지금 규칙으로는 철도가 아니면 지금 규칙의 유형으로 본다(담당자가 고친 값은 '철도' 외에는 그대로)."""
+    facs = []
+    for f in d.get('facilities', []):
+        t = f.get('type')
+        if t == '철도' and not RAIL_WORDS.search(f['name']):
+            g = facility_type({'types': {}}, '', f['name'])
+            t = g if g != '철도' else t
+        facs.append({**f, 'type': t})
+    return {**d, 'facilities': facs}
+
+
 def load(cfg=None):
     cfg = dict(cfg or llm.load_config())
     names = {d['name'] for d in cfg.get('districts', [])}
-    cfg['districts'] = list(cfg.get('districts', [])) + [d for d in local_districts() if d['name'] not in names]
+    cfg['districts'] = list(cfg.get('districts', [])) + [_repair(d) for d in local_districts() if d['name'] not in names]
     tpl, common = cfg.get('item_templates', {}), cfg.get('common_items', [])
     items, types = [], {}
     for d in cfg.get('districts', []):

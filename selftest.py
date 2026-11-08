@@ -319,6 +319,10 @@ def main():
                        '마유로 연결도로 접속시설': '접속시설'}.items():
         got = catalog.facility_type({'types': {}}, '', name)
         assert got == want, (name, got, want)
+    # 예전 규칙으로 '철도'로 잘못 저장된 등록 지구는 불러올 때 바로잡음(이름에 철도라는 말이 있으면 그대로)
+    fixed = catalog._repair({'name': 'x', 'facilities': [{'name': '교차로 개선', 'type': '철도'},
+                                                       {'name': '한빛선 철도 연장', 'type': '철도'}, {'name': '가람선', 'type': '철도'}]})
+    assert [f['type'] for f in fixed['facilities']] == ['도로', '철도', '철도'], fixed
     ok("파일명에 '지구'가 없는 해오름 문서 → 해오름지구(새 지구), 본문 제목만 있는 미리내 → 미리내지구, "
        f"한빛 문서 → 등록된 한빛지구, 섞인 문서 경고({', '.join(mixed['others'])}), 단서 없으면 추정 안 함")
 

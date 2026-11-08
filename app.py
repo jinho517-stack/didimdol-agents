@@ -29,8 +29,8 @@ from common import catalog, llm
 BASE = Path(__file__).parent
 SAMPLE = BASE / 'sample'
 UPLOADS = db.OUTPUT / 'uploads'
-NAV = ['새 보고서', '내 보고서', '자료 DB', '서식 규칙']  # 새 디자인 시안 메뉴(+ 자료 DB: 적재 현황·값 충돌·통합 비교)
-NEW, REVIEW, DOCS, RULES = NAV
+NAV = ['자료 DB', '보고서 작성']  # 자료 DB가 처음(올리기·분류·적재), 보고서 작성(설정 → 초안 검토 → 한글 저장)
+DOCS, REPORT = NAV
 DB_VIEWS = ['📥 자료 적재', '🗂 적재 현황·관리', '🔎 통합 비교']  # 올리기는 자료 적재 한 곳, 확인·수정은 적재 현황·관리
 DB_HELP = {'📥 자료 적재': '여러 자료를 한 번에 올리면 → 교통대책·내용별로 나누고 → 애매한 것만 사람이 확인한 뒤 → DB에 적재합니다.',
            '🗂 적재 현황·관리': 'DB에 들어간 값·추진경위와 적재된 문서를 보고, 문서 정보를 고치거나 빼는 곳입니다. '
@@ -517,6 +517,7 @@ def page_docs():
     registered = db.sources(con)
     if registered:
         db_overview()
+        district_editor()
         docs_manage(registered)
     else:
         st.info('아직 DB에 적재된 문서가 없습니다. 📥 자료 적재에서 자료를 올리세요.')
@@ -530,6 +531,27 @@ def page_docs():
             sample_section()
         else:
             upload_section()
+
+
+def district_editor():
+    """화면에서 등록한 사업지구의 사업 목록·유형을 고친다(등록할 때 잘못 들어간 유형 바로잡기)."""
+    local = {d['name']: d for d in catalog.local_districts()}
+    with st.expander('🛠 사업 목록·유형 고치기 (화면에서 등록한 사업지구)'):
+        if not local:
+            st.caption('화면에서 등록한 사업지구가 없습니다. 기본 지구(config.yaml)는 설정 파일에서 고칩니다.')
+            return
+        d = st.selectbox('사업지구', list(local), key='ed_district')
+        fixed = catalog._repair(local[d])['facilities']  # 지금 적용 중인 유형(예전 오류 바로잡은 값)
+        df = pd.DataFrame([{'사업명': f['name'], '유형': f['type']} for f in fixed])
+        new = st.data_editor(df, num_rows='dynamic', hide_index=True, width='stretch', key=f'ed_{d}',
+                             column_config={'유형': st.column_config.SelectboxColumn(options=compare.TYPES, required=True,
+                                                                                    help='환승 = 환승시설')})
+        if st.button(f'{d} 사업 목록 저장', key='ed_save'):
+            facs = [{'name': str(r['사업명']).strip(), 'type': r['유형'] or catalog.facility_type(CAT, '', str(r['사업명']))}
+                    for _, r in new.iterrows() if str(r['사업명'] or '').strip()]
+            catalog.save_local_district(d, facs, key=local[d].get('key'))
+            flash(f'{d} 사업 목록 {len(facs)}개를 저장했습니다. 값 판정은 그대로이고, 보고서·비교 화면의 유형이 바뀝니다.')
+            st.rerun()
 
 
 def docs_manage(registered):
@@ -870,123 +892,59 @@ def make_report(district, o):
                                   'polish': pol, 'stamp': datetime.now().strftime('%Y%m%d_%H%M%S')}
 
 
-def load_files_to_db(files, district):
-    """올린 파일 → A01 값 추출(키 있으면 AI) → A02 판정·DB 적재. 반환: {파일 이름: (값 수, 오류)}"""
-    metas = A01.describe([p for p, _ in files], db.next_doc_num(con), CAT)
-    for m in metas:
-        m['doc_id'] = db.doc_id_for_file(con, m['file']) or m['doc_id']
-        m['district'] = district
-    res = A01.run(metas, catalog.items_for(CAT, district), use_llm=HAS_LLM, cfg=cfg)
-    A02.run(con, [r for r in res if not r[2]], CAT['default'])
-    return {d['file']: (len(c), e) for d, c, e in res}
 
-
-def file_list(files, status):
-    rows = []
-    for p, kind in files:
-        name = Path(p).name
-        st_ = status.get(name)
-        if st_ is None:
-            badge = '<span class="wait">올림</span>'
-        elif st_[1]:
-            badge = '<span class="bad">읽기 실패</span>'
-        else:
-            badge = f'<span class="ok">분석 완료 · 값 {st_[0]}개</span>'
-        rows.append(f'<li class="nw-file"><span class="ext">{EXT.get(Path(p).suffix.lower(), "FILE")}</span>'
-                    f'<span class="info"><span class="name">{esc(name)}</span><span class="meta">{esc(kind)}</span></span>{badge}</li>')
-    st.markdown('<ul class="nw-files">' + ''.join(rows) + '</ul>', unsafe_allow_html=True)
-
-
-def page_new():
-    """1. 새 보고서: 자료 올리기 → 보고서 설정 → 초안 만들기(지구 자동 판단·값 추출·DB 적재·초안)"""
-    st.markdown('<div class="nw-hero">' + steps3(0) + '<h1>자료만 올리세요.<br>보고서는 규칙대로 쓸게요.</h1>'
-                '<p>LH 개조식 규칙에 맞춘 초안과 서식 점검 결과를 한 번에 보여 드려요.</p></div>', unsafe_allow_html=True)
-    with st.container(key='nw_drop'):
-        ups = st.file_uploader('파일을 끌어다 놓으세요',
-                               help='한글(hwpx), 워드, PDF, 텍스트 · 여러 개 한 번에 가능. 사업지구는 올린 자료로 자동으로 정해요.',
-                               type=['hwpx', 'docx', 'pdf', 'txt', 'xlsx'], accept_multiple_files=True, key='nw_files')
-    folder = UPLOADS / 'new'
-    files = []
-    for f in ups or []:
-        folder.mkdir(parents=True, exist_ok=True)
-        p = folder / f.name
-        if not p.exists() or p.stat().st_size != f.size:
-            p.write_bytes(f.getvalue())
-        files.append((str(p), K.guess_kind(f.name)))
-    if not files and INTAKE_SAMPLE.exists():
-        c1, _ = st.columns([2, 3])
-        if c1.button('📁 모의 자료로 해 보기 (누리마루지구 · 문서 5건)', key='nw_sample'):
-            st.session_state['nw_sample_on'] = True
-        if st.session_state.get('nw_sample_on'):
-            files = [(str(p), k) for p in sorted(INTAKE_SAMPLE.iterdir()) if (k := K.guess_kind(p.name)) in INTAKE_KINDS]
-    status = st.session_state.setdefault('nw_status', {})
-    if files:
-        file_list(files, status)
-
-    # 사업지구: 올린 문서로 자동(파일명·본문 → 못 찾으면 AI). 없으면 DB에 있는 지구에서 고름
-    names = list(dict.fromkeys((district_options() if db.facts(con) else []) + CAT['districts']))
-    det = None
-    if files:
-        det, fsig = ik_detect(files)
-        if det and not det['known']:
-            ik_register_box(det)
-            return
-        if det and st.session_state.get('nw_det_sig') != fsig:
-            st.session_state['nw_det_sig'] = fsig
-            st.session_state['nw_district'] = det['known']
-    if st.session_state.get('nw_district') not in names:
-        st.session_state['nw_district'] = CAT['default'] if CAT['default'] in names else names[0]
-
-    with st.container(border=True, key='card_settings'):
-        st.markdown('<div class="nw-h2">보고서 설정</div>', unsafe_allow_html=True)
-        c0, c1, c2, c3 = st.columns([1.1, 1.1, 2.2, 1])
-        district = c0.selectbox('사업지구', names, key='nw_district',
-                                help='올린 문서로 자동으로 고릅니다. 자료를 올리지 않으면 DB에 이미 있는 그 지구 값으로 만듭니다.')
-        c1.selectbox('종류', ['현안 보고'], key='nw_kind', help='지금은 현안 보고자료 하나만 만듭니다.')
-        tail = A04.PRESETS[draft.REPORT][0]
-        title = c2.text_input('제목', f'{district} {tail}', key=f'nw_title_{district}')
-        dtxt = c3.text_input('보고 날짜', lh_style_date(datetime.now()), key='nw_date')
-        mismatch = det and det['known'] != district
-        if det:
-            st.markdown(f"<div class='nw-dist{' bad' if mismatch else ''}'>🔎 올린 자료의 사업지구: <b>{esc(det['known'])}</b>"
-                        + (f' — 고른 지구({esc(district)})와 다릅니다. 이대로는 초안을 만들지 않습니다.' if mismatch else ' ✓')
-                        + f"<small>근거: {esc(det['evidence'])}</small></div>", unsafe_allow_html=True)
-        facts = db.facts(con, district=district)
-        o = report_options(district, facts)
-        st.markdown('<p class="nw-hint">꼭지 두 줄 이내 · 개조식 끝맺음 · 표 11pt 이상 · 자료에 없는 숫자는 “확인 필요” · '
-                    '서식 규칙은 위 메뉴 “서식 규칙”에서 볼 수 있어요</p>', unsafe_allow_html=True)
-    show_flash()
-    ready = bool(files) or bool(facts)
-    _, cgo = st.columns([3, 1])
-    with cgo.container(key='nw_go'):
-        go = st.button('초안 만들기  →', type='primary', width='stretch', disabled=not ready or bool(mismatch),
-                       help=None if ready else '자료를 올리거나, DB에 값이 있는 사업지구를 고르세요.')
-    if go:
-        o.update(title=title, date=parse_kdate(dtxt))
-        with st.spinner('자료를 읽고 값을 뽑아 DB에 넣은 뒤 초안을 쓰는 중…' + (' (AI 사용, 30초~1분)' if HAS_LLM else '')):
-            if files:
-                status.update(load_files_to_db(files, district))
-            if not db.facts(con, district=district):
-                st.error('자료에서 값을 하나도 찾지 못했습니다. 사업지구가 맞는지, 문서가 광역교통 자료인지 확인하세요.')
-                return
-            make_report(district, o)
-        st.session_state['goto'] = REVIEW
-        st.rerun()
 
 
 def lh_style_date(d):
     return f"’{d:%y}. {d.month}. {d.day}."
 
 
-def page_review():
-    """2. 내 보고서(초안 검토): 근거 자료 | 보고서 미리보기 | 서식 점검 + 확인 필요 → 한글(hwpx)로 저장"""
-    rep = st.session_state.get('report')
-    if not rep:
-        st.markdown('<div class="nw-hero">' + steps3(1) + '<h1>아직 만든 보고서가 없어요.</h1>'
-                    '<p>새 보고서에서 자료를 올리고 초안을 만들어 주세요.</p></div>', unsafe_allow_html=True)
-        if st.button('새 보고서 만들기  →', type='primary'):
-            st.session_state['goto'] = NEW
+def report_setup(has_report):
+    """보고서 설정(사업지구·종류·제목·보고 날짜·세부 설정) → 초안 만들기. DB에 쌓인 값으로 만든다."""
+    names = district_options()
+    if st.session_state.get('rp_district') not in names:
+        cur = st.session_state.get('district')
+        st.session_state['rp_district'] = cur if cur in names else names[0]
+    with st.container(border=True, key='card_settings'):
+        st.markdown('<div class="nw-h2">보고서 설정</div>', unsafe_allow_html=True)
+        c0, c1, c2, c3 = st.columns([1.1, 1.1, 2.2, 1])
+        district = c0.selectbox('사업지구', names, key='rp_district', help='DB에 값이 쌓인 사업지구 중에서 고릅니다.')
+        c1.selectbox('종류', ['현안 보고'], key='rp_kind', help='지금은 현안 보고자료 하나만 만듭니다.')
+        tail = A04.PRESETS[draft.REPORT][0]
+        title = c2.text_input('제목', f'{district} {tail}', key=f'rp_title_{district}')
+        dtxt = c3.text_input('보고 날짜', lh_style_date(datetime.now()), key='rp_date')
+        facts = db.facts(con, district=district)
+        o = report_options(district, facts)
+        st.markdown('<p class="nw-hint">꼭지 두 줄 이내 · 개조식 끝맺음 · 표 11pt 이상 · 자료에 없는 숫자는 “확인 필요” · '
+                    '숫자는 모두 DB 최신값</p>', unsafe_allow_html=True)
+        _, cgo = st.columns([3, 1])
+        with cgo.container(key='nw_go'):
+            go = st.button('다시 만들기  →' if has_report else '초안 만들기  →', type='primary', width='stretch')
+    if go:
+        o.update(title=title, date=parse_kdate(dtxt))
+        with st.spinner('DB 값으로 초안을 쓰는 중…' + (' (AI가 서식 규칙대로 문장을 다듬는 중, 10~30초)' if o['use_polish'] else '')):
+            make_report(district, o)
+        st.rerun()
+
+
+def page_report():
+    """보고서 작성: 설정 → 초안 만들기 → 초안 검토(근거 자료 | 미리보기 | 서식 점검) → 한글(hwpx)로 저장"""
+    if not db.facts(con):
+        st.markdown('<div class="nw-hero">' + steps3(1) + '<h1>먼저 자료를 올려 주세요.</h1>'
+                    '<p>자료 DB에서 자료를 올리고 적재하면, 그 값으로 보고서 초안을 만들어요.</p></div>', unsafe_allow_html=True)
+        if st.button('자료 DB로  →', type='primary'):
+            st.session_state['goto'] = DOCS
             st.rerun()
+        return
+    rep = st.session_state.get('report')
+    if rep:
+        with st.expander('보고서 설정 바꾸기 · 다시 만들기', expanded=False):
+            report_setup(True)
+    else:
+        st.markdown(steps3(1), unsafe_allow_html=True)
+        report_setup(False)
+        st.markdown('<div class="dg-empty"><div class="ico"></div><div>설정을 확인하고 <b>초안 만들기</b>를 누르세요.'
+                    '<small>숫자는 모두 DB의 최신값에서 가져옵니다.</small></div></div>', unsafe_allow_html=True)
         return
     district, res3, o = rep['district'], rep['a03'], rep['opts']
     head = st.container()
@@ -1070,17 +1028,6 @@ def page_review():
         st.caption('한글(hwpx)은 회사 양식 서식 파일에 그대로 채워 만들어요.' if lay.use_form else
                    '이 양식의 회사 한글 서식이 없어 한글본은 기본 서식이에요 — 오른쪽 "회사 한글 양식 올리기"에서 올리면 회사 양식 그대로 나와요.')
 
-
-def page_rules():
-    """3. 서식 규칙: 보고서 작성 스킬(담당자 원칙·문장 규칙·표·본문 서식)"""
-    sk = A04.skill.load()
-    st.markdown('<div class="nw-hero"><h1 style="font-size:32px">서식 규칙</h1>'
-                f'<p>초안을 만들 때 자동으로 적용하는 규칙이에요. ({esc(sk["title"])} v{sk["version"]})</p></div>', unsafe_allow_html=True)
-    st.markdown(''.join(f'<div class="rl-item">{esc(x)}</div>' for x in A04.skill.summary()), unsafe_allow_html=True)
-    with st.container(border=True, key='card_rules'):
-        st.markdown(sk['text'])
-    st.caption(f"파일: {sk['path'].relative_to(BASE.resolve()).as_posix() if sk['found'] else '없음(기본값 사용)'} · "
-               '이 파일을 고치면 다음 초안부터 반영돼요.')
 
 
 # ---------------- 📥 자료 적재 (1 자료 올리기 → 2 AI 추출·분류 → 3 사람 확인 → 4 DB 적재) ----------------
@@ -1590,6 +1537,9 @@ def page_compare():
 
 # ---------------- 💾 DB ----------------
 def page_db():
+    st.markdown('<div class="nw-hero">' + steps3(0) + '<h1>자료만 올리세요.<br>보고서는 규칙대로 쓸게요.</h1>'
+                '<p>올린 자료를 교통대책별로 나눠 DB에 쌓고, 그 값으로 LH 개조식 규칙에 맞춘 초안과 서식 점검 결과를 보여 드려요.</p>'
+                '</div>', unsafe_allow_html=True)
     view = st.segmented_control('DB 보기', DB_VIEWS, key='db_view', label_visibility='collapsed') or DB_VIEWS[0]
     st.markdown(f'<div class="db-help">{DB_HELP[view]}</div>', unsafe_allow_html=True)
     {DB_VIEWS[0]: page_intake, DB_VIEWS[1]: page_docs, DB_VIEWS[2]: page_compare}[view]()
@@ -1607,11 +1557,11 @@ def top_bar(page):
         with c1:
             a, b = st.columns([0.18, 1], vertical_alignment='center')
             a.markdown(LOGO, unsafe_allow_html=True)
-            if b.button('디딤돌', key='tb_home', type='tertiary', help='새 보고서'):
-                st.session_state['goto'] = NEW
+            if b.button('디딤돌', key='tb_home', type='tertiary', help='자료 DB'):
+                st.session_state['goto'] = DOCS
                 st.rerun()
         with c2:
-            _, nav = st.columns([0.5, 3])
+            _, nav = st.columns([1.6, 1])
             nav.segmented_control('메뉴', NAV, key='top_nav', label_visibility='collapsed',
                                   on_change=lambda: st.session_state.update(nav=st.session_state['top_nav'] or st.session_state['nav']))
 
@@ -1619,8 +1569,8 @@ def top_bar(page):
 if 'goto' in st.session_state:
     st.session_state['nav'] = st.session_state.pop('goto')
 if st.session_state.get('nav') not in NAV:
-    st.session_state['nav'] = NEW
+    st.session_state['nav'] = DOCS
 st.session_state.setdefault('db_view', DB_VIEWS[0])
 page = st.session_state['nav']
 top_bar(page)
-{NEW: page_new, REVIEW: page_review, DOCS: page_db, RULES: page_rules}[page]()
+{DOCS: page_db, REPORT: page_report}[page]()
