@@ -330,7 +330,13 @@ st.markdown("""<style>
 .st-key-nw_drop [data-testid="stFileUploaderDropzoneInstructions"] span{font-size:14px;font-weight:400;color:var(--muted)}
 .st-key-nw_drop label p{font-size:20px !important;font-weight:700 !important;color:var(--ink) !important;letter-spacing:-.02em}
 .st-key-nw_drop label{margin-bottom:6px}
-.st-key-nw_drop [data-testid="stFileUploaderDropzone"] button{border:1px solid var(--ink);min-height:44px;padding:0 20px}
+.st-key-nw_drop [data-testid="stFileUploaderDropzone"] [data-testid="stBaseButton-secondary"]{border:1px solid var(--ink);min-height:44px;padding:0 20px}
+/* 올린 파일 칸: 지우기(×)는 작은 아이콘, '+'(더 올리기)는 점선 네모 — 위 '파일 고르기' 버튼 모양이 번지지 않게 */
+[data-testid="stFileUploader"] [data-testid="stBaseButton-minimal"]{min-height:0 !important;height:28px;width:28px;padding:0 !important;
+  border:0 !important;border-radius:50% !important;background:transparent !important}
+[data-testid="stFileUploader"] [data-testid="stBaseButton-minimal"]:hover{background:var(--sunken) !important}
+[data-testid="stFileUploader"] [data-testid="stBaseButton-borderlessIcon"]{min-height:0 !important;height:44px;width:44px;min-width:44px !important;flex:0 0 44px;padding:0 !important;
+  border:1.5px dashed #bdb9b0 !important;border-radius:var(--r-md) !important;background:transparent !important}
 .nw-files{margin:6px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:10px}
 .nw-file{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;background:var(--surface);border:1px solid var(--line);
   border-radius:var(--r-md);padding:14px 18px}
@@ -1137,8 +1143,13 @@ def ik_detect(files):
             texts.append('')
     with st.spinner('올린 문서에서 사업지구를 찾는 중…'):
         det = catalog.detect_district(CAT, [Path(p).name for p, _ in files], texts, cfg, use_llm=HAS_LLM)
-    if det and not det['known']:  # 새 지구면 등록할 때 쓸 사업 후보도 같이
-        det['facilities'] = catalog.suggest_facilities([t for t in texts if t])
+    if det and not det['known']:  # 새 지구면 등록할 때 쓸 사업 목록도 같이(규칙 → 못 찾으면 AI)
+        det['facilities'] = catalog.suggest_facilities([t for t in texts if t], det['name'])
+        det['fac_source'] = '문서 규칙'
+        if not det['facilities'] and HAS_LLM:
+            with st.spinner('문서에서 사업 목록을 찾는 중…'):
+                det['facilities'] = catalog.ai_facilities([t for t in texts if t], cfg, det['name'])
+            det['fac_source'] = 'AI'
     st.session_state['ik_det'] = (sig, det)
     return det, sig
 
@@ -1149,19 +1160,15 @@ def ik_register_box(det):
     with card():
         st.markdown(f"**🆕 새 사업지구로 보입니다: {esc(det['name'])}** — 근거: {esc(det['evidence'])}"
                     + (' · AI가 문서 앞부분을 읽고 추정' if det['source'] == 'AI' else ''))
-        st.caption('등록해야 문서를 교통대책별로 나눌 수 있습니다. 이름과 사업 목록(한 줄에 "사업명, 유형")을 확인하고 등록하세요.')
-        c1, c2 = st.columns([1, 2])
-        name = c1.text_input('사업지구 이름', det['name'], key=f"ik_new_{det['name']}")
-        default = '\n'.join(f"{s['name']}, {s['type']}" for s in det.get('facilities') or [])
-        fac_text = c2.text_area('사업 목록 (유형: 도로·철도·환승시설·대중교통·접속시설)', default, height=120,
-                                key=f"ik_newf_{det['name']}")
-        facs = []
-        for ln in fac_text.splitlines():
-            parts = [x.strip() for x in ln.split(',')]
-            if parts and parts[0]:
-                kind = {'환승시설': '환승'}.get(parts[1], parts[1]) if len(parts) > 1 else ''
-                facs.append({'name': parts[0], 'type': kind if kind in compare.TYPES else catalog.facility_type(CAT, '', parts[0])})
-        if st.button(f'"{name}" 등록하고 계속 (사업 {len(facs)}개)', type='primary', disabled=not (name.strip() and facs)):
+        facs = det.get('facilities') or []
+        kind_name = {'환승': '환승시설'}
+        st.markdown('<div class="ik-det">문서에서 찾은 사업 ' + (f"{len(facs)}개" + (' (AI 판단)' if det.get('fac_source') == 'AI' else '')
+                    + ': ' + ' · '.join(f"<b>{esc(f['name'])}</b> {esc(kind_name.get(f['type'], f['type']))}" for f in facs)
+                    if facs else '— 아직 못 찾았습니다. 등록 후 문서를 적재하면 문서에 나온 사업을 자동으로 더합니다.') + '</div>',
+                    unsafe_allow_html=True)
+        st.caption('사업 목록·유형이 틀리면 등록 후 자료 DB › 적재 현황·관리 › 사업 목록·유형 고치기에서 바꿀 수 있습니다.')
+        name = st.text_input('사업지구 이름', det['name'], key=f"ik_new_{det['name']}")
+        if st.button(f'"{name}" 등록하고 계속', type='primary', disabled=not name.strip()):
             catalog.save_local_district(name.strip(), facs, key=det['key'] if name.strip() == det['name'] else None)
             CAT = catalog.load(cfg)
             st.session_state['ik_district_next'] = name.strip()

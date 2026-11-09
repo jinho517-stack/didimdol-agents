@@ -320,6 +320,12 @@ def main():
                        '마유로 연결도로 접속시설': '접속시설'}.items():
         got = catalog.facility_type({'types': {}}, '', name)
         assert got == want, (name, got, want)
+    # 새 지구 사업 목록 자동 판단(11-09): 표 '사 업 명' 칸·'(사업 현황) ○○(…)' 문장, 지구 이름·'조성'은 뗌
+    daon = ['[1행] ㅇ (사업 현황) 다온IC(램프 2개소, 540억원)는 준공 목표\n사 업 명\n다온 공공주택지구 조성사업 및 광역교통개선대책',
+            '사 업 명\n다온 광역BRT\nㅇ (사업 현황) 광역BRT(11.2km, 880억원)는 개통 목표',
+            '사 업 명\n다온 광역버스 차고지 조성\n사업비\n120억원', '사 업 명\n다온지구 입주 초기 버스 지원']
+    got = {f['name'] for f in catalog.suggest_facilities(daon, '다온지구')}
+    assert got == {'다온IC', '광역BRT', '광역버스 차고지', '입주 초기 버스 지원'}, got
     # 예전 규칙으로 '철도'로 잘못 저장된 등록 지구는 불러올 때 바로잡음(이름에 철도라는 말이 있으면 그대로)
     fixed = catalog._repair({'name': 'x', 'facilities': [{'name': '교차로 개선', 'type': '철도'},
                                                        {'name': '한빛선 철도 연장', 'type': '철도'}, {'name': '가람선', 'type': '철도'}]})

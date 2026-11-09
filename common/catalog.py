@@ -225,11 +225,39 @@ def facility_type(cat, district, facility):
     return '도로'
 
 
-def suggest_facilities(texts):
-    """새 지구 문서에서 사업명 후보 찾기: "ㅇ (○○도로) …", 표 첫 칸, "○○선/○○IC/○○센터" 같은 낱말."""
-    pat = r'[가-힣A-Za-z0-9·]+(?:\s[가-힣A-Za-z0-9·]+){0,3}?\s?(?:연결도로|도로확장|도로|확장|IC|교차로|선(?:\([^)]*\))?|BRT|환승센터|환승주차장|센터|버스\s?지원|지원)'
+FAC_SUFFIX = (r'(?:연결도로|도로확장|도로|확장|IC|JC|교차로|교량|지하차도|램프|선(?:\([^)]*\))?|BRT|DRT|트램|환승센터|환승주차장|'
+              r'센터|차고지|공영차고지|정류장|주차장|버스\s?지원|지원)')
+
+
+def _clean_fac(name, district=''):
+    """사업명 다듬기: 앞의 지구 이름('다온 ', '다온지구 ')·뒤의 '조성'·'신설'을 뗀다(다온IC처럼 붙은 이름은 그대로)."""
+    n = re.sub(r'\s+', ' ', name or '').strip(' ·,')
+    stem = re.sub(r'(공공주택)?지구$', '', district or '').strip()
+    if stem:
+        n = re.sub(rf'^{re.escape(stem)}(\s*공공주택지구|지구)?\s+', '', n)
+    return re.sub(r'\s+(조성|신설|설치|사업)$', '', n).strip()
+
+
+def suggest_facilities(texts, district=''):
+    """새 지구 문서에서 사업명 후보 찾기: 표의 '사업명' 칸, "ㅇ (사업 현황) ○○(…)는", "ㅇ (○○도로) …", 표 첫 칸,
+    "○○선/○○IC/○○센터/○○차고지" 같은 낱말."""
+    pat = r'[가-힣A-Za-z0-9·]+(?:\s[가-힣A-Za-z0-9·]+){0,3}?\s?' + FAC_SUFFIX
     seen = {}
+
+    def add(c, w=1):
+        c = _clean_fac(c, district)
+        if c and not re.search(r'\d{4}|억|km|㎡|공공주택지구|광역교통개선대책', c) and not is_generic(c):
+            seen[c] = seen.get(c, 0) + w
     for t in texts:
+        lines = [re.sub(r'^\[[^\]]+\]\s*', '', ln).strip() for ln in t.splitlines()]  # '[3행] ' 같은 위치 표시 뗌
+        for i, ln in enumerate(lines):  # 표 '사 업 명' 칸 다음 줄 = 사업 이름(한글 표는 칸마다 한 줄로 읽힘)
+            if re.fullmatch(r'사\s*업\s*명', ln):
+                nxt = next((x for x in lines[i + 1:i + 3] if x), '')
+                if 2 <= len(nxt) <= 30 and not re.search(r'공공주택지구|조성사업 및', nxt):
+                    add(re.sub(r'\(.*?\)$', '', nxt), 3)
+            m = re.match(r'[ㅇ○◦·\-]?\s*\(사업\s*현황\)\s*([^()]{2,25}?)\s*\(', ln)  # (사업 현황) 광역BRT(11.2km, …)는
+            if m and re.fullmatch(pat, _clean_fac(m.group(1), district)):
+                add(m.group(1), 2)
         for line in t.splitlines():
             body = re.sub(r'^\[[^\]]+\]\s*', '', line)
             cands = re.findall(r'\(([^()]{2,25}(?:\([^)]*\))?)\)', body)
@@ -239,13 +267,37 @@ def suggest_facilities(texts):
             if lead:
                 cands.append(lead.group(1))
             for c in cands:
-                m = re.fullmatch(pat, c.strip())
-                if m and not re.search(r'\d{4}|억|km|㎡', c):
-                    seen[c.strip()] = seen.get(c.strip(), 0) + 1
+                if re.fullmatch(pat, c.strip()) and not re.search(r'\d{4}|억|km|㎡', c):
+                    add(c.strip())
     out = []
     for name, _ in sorted(seen.items(), key=lambda x: -x[1]):
         if not any(name != o and name in o for o in seen) and not is_generic(name):  # 더 긴 이름 우선, 일반 낱말 제외
             out.append({'name': name, 'type': facility_type({'types': {}}, '', name)})
+    return out[:12]
+
+
+def ai_facilities(texts, cfg=None, district=''):
+    """규칙으로 사업을 못 찾았을 때: AI가 문서 제목·앞부분을 읽고 광역교통개선대책 사업 목록을 고른다(문서에 나온 이름만)."""
+    from common import llm
+    if not llm.available(cfg):
+        return []
+    heads = '\n\n'.join(f'[문서 {i + 1}]\n' + (t or '')[:1500] for i, t in enumerate(texts[:12]))
+    prompt = ('아래 문서들은 한 사업지구의 광역교통개선대책 관련 보고서다. 이 지구의 광역교통 사업(도로·IC·철도·BRT·버스·환승센터·차고지 등) '
+              '목록을 뽑아라. 문서에 나온 이름 그대로 쓰되 앞의 지구 이름("다온 ", "○○지구 ")과 뒤의 "조성"은 뗀다. '
+              '지구 전체(공공주택지구 조성사업)·기관·회의는 빼고, 같은 사업은 한 번만.\n'
+              f'유형은 {", ".join(["도로", "철도", "환승", "대중교통", "접속시설"])} 중 하나.\n'
+              f'{heads}\n출력 형식: {{"projects": [{{"name": "...", "type": "..."}}]}}')
+    try:
+        data = llm.ask_json(prompt, cfg=cfg)
+    except Exception:
+        return []
+    joined = re.sub(r'\s', '', ' '.join(texts))
+    out = []
+    for x in data.get('projects') or []:
+        name = _clean_fac(str(x.get('name') or ''), district)
+        if name and not is_generic(name) and re.sub(r'\s', '', name) in joined and name not in [o['name'] for o in out]:
+            t = str(x.get('type') or '')
+            out.append({'name': name, 'type': t if t in ('도로', '철도', '환승', '대중교통', '접속시설') else facility_type({'types': {}}, '', name)})
     return out[:12]
 
 
