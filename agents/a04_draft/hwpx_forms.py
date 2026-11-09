@@ -474,8 +474,11 @@ def _table(proto, cols, rows, F):
             if ri > 0 and j > 0:
                 c = re.sub(r'(<hp:p [^>]*?)paraPrIDRef="\d+"', lambda m: m.group(1) + f'paraPrIDRef="{num_para if numeric else text_para}"',
                            c, count=1)
-            c = _fill(c, [v])
             pad = 2 * margin + SLACK + (RIGHT_GAP if numeric else 0)
+            if ri > 0 and not numeric and _glyphs(v, font) + pad > widths[j]:  # 여러 줄로 넘어가는 글자 칸은 왼쪽 정렬
+                c = re.sub(r'(<hp:p [^>]*?)paraPrIDRef="(\d+)"', lambda m: m.group(1) + f'paraPrIDRef="{F.align(m.group(2), "LEFT")}"',
+                           c, count=1)
+            c = _fill(c, [v])
             squeeze = j in over and (_two_lines(v, font) if ri == 0 else _glyphs(v, font)) + pad > widths[j]  # 이 칸만 넘침
             c = re.sub(r'charPrIDRef="(\d+)"',
                        lambda m: f'charPrIDRef="{F.tight_char(m.group(1), size, OVER_SP if squeeze else None)}"', c)
@@ -594,6 +597,18 @@ def _att_heading(proto, num, label, F, ref_char):
     head = re.sub(r'rowCnt="\d+" colCnt="\d+"', 'rowCnt="1" colCnt="3"', head, count=1)
     head = re.sub(r'(<hp:sz width="\d+" widthRelTo="\w+" height=")\d+', lambda m: m.group(1) + str(h), head, count=1)
     return _page_break(head + '<hp:tr>' + ''.join(tcs) + '</hp:tr>' + tail, True)
+
+
+def _no_gap_before_break(segs):
+    """쪽 나눔(pageBreak="1") 바로 앞의 빈 간격 문단을 지운다. 쪽이 거의 찬 상태에서 빈 줄이 다음 쪽으로 넘어가면
+    뒤의 쪽 나눔과 겹쳐 빈 쪽이 생긴다(보고서 스킬 5장)."""
+    out = []
+    for s_ in segs:
+        if re.match(r'<hp:p [^>]*?pageBreak="1"', s_):
+            while out and '<hp:tbl' not in out[-1] and not _text(out[-1]).strip():
+                out.pop()
+        out.append(s_)
+    return out
 
 
 def _balance(seg, title, limit=13):
@@ -746,5 +761,6 @@ def render(styled, form, form_path=None):
                 out += [F.segs[i_contact - 1],
                         _fill(F.segs[i_contact], ['담당부서', b[1], '책임자', '팀  장 ', '', '', '담당자', '차  장', '', ''])]
     out = [s for s in out if s]
+    out = _no_gap_before_break(out)
     preview = lh_style.to_text(styled)
     return F.save(out, title, preview)

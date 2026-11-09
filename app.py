@@ -965,7 +965,15 @@ def page_report():
                         '적었어요. 자료 DB › 적재 현황·관리에서 고르면 다시 만들 때 반영돼요.</span></div>', unsafe_allow_html=True)
         pol = rep.get('polish')
         if pol and 'written' in pol and not pol['error']:
-            st.markdown(f'<div class="rv-ok">AI가 수정본 문체로 쓴 목차: {esc(", ".join(pol["written"]) or "없음")}</div>',
+            pg, att = pol.get('page') or {}, pol.get('attach') or {}
+            done = [f"본문 {', '.join(pol['written'])}"] if pol['written'] else []
+            if pg.get('after_mm'):
+                done.append('본문을 1쪽에 맞춰 꼭지를 합침')
+            if pol.get('refit', {}).get('fixed'):
+                done.append(f"꼭지 {pol['refit']['fixed']}개 길이를 두 줄에 맞춤")
+            if att:
+                done.append('붙임 표 간추림(' + ', '.join(f'{k} {v}줄' for k, v in att.items()) + ')')
+            st.markdown('<div class="rv-ok">AI가 담당자 수정본 기준으로 쓴 곳: ' + esc(' · '.join(done) or '없음') + '</div>',
                         unsafe_allow_html=True)
             if pol['dropped'] or pol['kept_rule']:
                 with st.expander(f"숫자 검사로 뺀 줄 {len(pol['dropped'])}개 · 규칙 초안 그대로 {len(pol['kept_rule'])}개"):

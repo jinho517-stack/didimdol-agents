@@ -19,7 +19,7 @@ GAP_MM = {'sq': 4.5, 'o': 2.2, 'dash': 1.4, 'note': 1.1}
 
 def writing():
     w = SK.load()['settings'].get('writing', {})
-    return {'line_em': w.get('line_em', 30), 'max_em': w.get('max_em', 58), 'min_em': w.get('min_em', 47)}
+    return {'line_em': w.get('line_em', 30), 'max_em': w.get('max_em', 56), 'min_em': w.get('min_em', 49)}
 
 
 def em(text, paren_scale=13 / 15):

@@ -151,7 +151,7 @@ CSS = """<style>
 .lh{background:#fff;color:#111;border:1px solid #c9c9c9;padding:30px 34px;max-width:860px;line-height:1.6;
     font-family:'휴먼명조','HCR Batang','Batang',serif;font-size:15px}
 .lh .hd{font-family:'HY헤드라인M','Malgun Gothic',sans-serif;font-weight:700}
-.lh .att{font-size:15pt;margin:4px 0 12px}.lh .attn{display:inline-block;border:1px solid #333;padding:1px 8px;margin-right:6px}
+.lh .att{font-size:16pt;margin:4px 0 14px;display:flex;gap:4px}.lh .attn{background:#364878;color:#fff;border:1.2px solid #000;padding:2px 10px;white-space:nowrap}.lh .attt{flex:1;border:1.2px solid #000;padding:2px 10px}
 .lh .pgbr{border-top:2px dashed #c9c6bd;margin:26px -8px 18px;position:relative}
 .lh .pgbr:after{content:'쪽 나눔';position:absolute;right:0;top:-10px;font:11px sans-serif;color:#999;background:#fff;padding:0 4px}
 .lh .ttl{text-align:center;font-size:22px;padding:6px 0;margin-bottom:4px}
@@ -208,7 +208,7 @@ def to_html(blocks, form):
         elif k == 'mid':
             o.append(f'<div class="hd mid">{e(b[1])}. {e(b[2])}</div>')
         elif k == 'att':
-            o.append(f'<div class="pgbr"></div><div class="hd att"><span class="attn">{e(b[1])}</span> {e(b[2])}</div>')
+            o.append(f'<div class="pgbr"></div><div class="hd att"><span class="attn">{e(b[1])}</span><span class="attt">{e(b[2])}</span></div>')
         elif k == 'big':
             o.append(f'<div class="hd big">{e(b[1])}. {e(b[2])}</div>')
         elif k == 'sq':
