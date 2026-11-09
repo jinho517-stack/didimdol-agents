@@ -852,7 +852,7 @@ def to_hwpx(blocks, template=TEMPLATE):
     body = ''.join(re.sub(r'^<hp:p id="\d+"', lambda m: f'<hp:p id="{next(n)}"', s) for s in out)
     files['Contents/section0.xml'] = (head + body + tail).encode('utf-8')
     files['Contents/header.xml'] = files['Contents/header.xml'].decode('utf-8').replace(
-        'breakNonLatinWord="BREAK_WORD"', 'breakNonLatinWord="KEEP_WORD"').encode('utf-8')  # 어절 단위 줄바꿈
+        'breakNonLatinWord="KEEP_WORD"', 'breakNonLatinWord="BREAK_WORD"').encode('utf-8')  # 어절 단위 줄바꿈(HWPX는 BREAK_WORD가 어절)
     title = next((b[1] for b in blocks if b[0] == 'title'), '보고서')
     files['Preview/PrvText.txt'] = to_text(blocks)[:1000].encode('utf-8')
     hpf = files['Contents/content.hpf'].decode('utf-8')

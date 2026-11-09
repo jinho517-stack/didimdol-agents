@@ -11,9 +11,9 @@ import re
 from agents.a04_draft import skill as SK
 
 LINE_EM = {'o': 30.0, 'sq': 30.0, 'dash': 28.0, 'note': 29.0}  # 11-09 한글 PDF로 다시 맞춤
-PAGE_MM = 250.0
+PAGE_MM = 246.0        # 11-09 한글 PDF: 쪽 위 19mm ~ 아래 265mm
 LINE_MM = 8.5          # 본문 한 줄(15pt, 줄간격 160%)
-ROW_MM = 7.6           # 표 한 줄(13pt)
+ROW_MM = 6.6           # 표 한 줄(13pt, 칸 여백 포함)
 GAP_MM = {'sq': 4.5, 'o': 2.2, 'dash': 1.4, 'note': 1.1}
 
 
@@ -68,7 +68,7 @@ def block_mm(b):
     if k in ('mid', 'big'):
         return 14.0
     if k == 'att':
-        return 16.0
+        return 24.0  # 붙임 제목 상자 + 아래 간격
     if k == 'sq':
         txt = f'({b[1]}) {b[2]}' if b[1] and b[2] else (b[1] or b[2] or '')
         return GAP_MM['sq'] + lines(em(txt), 'sq') * LINE_MM
@@ -76,13 +76,13 @@ def block_mm(b):
         return GAP_MM[k] + lines(em(b[1]), k) * LINE_MM
     if k == 'table':
         cols, rows = b[2], b[3]
-        h = 8.0 + 8.5  # 표 제목 + 제목줄
-        for r in rows:
-            longest = max((em(str(c)) / max(1.0, 32.0 / max(1, len(cols))) for c in r), default=1)
-            h += ROW_MM * max(1, math.ceil(longest - 0.05))
-        return h + 3.0
+        unit = any(re.search(r'\((km|㎡|억원|m|원|%)\)', str(c)) for c in cols)
+        h = 13.0 + (5.0 if unit else 0) + ROW_MM * max(1, math.ceil(sum(em(str(c)) for c in cols) * 0.87 / 34 - 0.05))
+        for r in rows:  # 한 줄에 들어가는지: 줄 전체 글자 폭 ÷ 표 폭(13pt 약 34칸)
+            h += ROW_MM * max(1, math.ceil(sum(em(str(c)) for c in r) * 0.87 / 34 - 0.05))
+        return h + 2.0
     if k == 'figure':
-        return 9.0 + b[2]
+        return 17.0 + b[2]
     return 0.0
 
 
@@ -97,8 +97,8 @@ def add_figures(styled, name=''):
         if used > PAGE_MM:  # 여러 쪽에 걸친 부분은 높이 어림이 부정확해 빈 쪽이 생길 수 있으므로 넣지 않음
             return
         rest = PAGE_MM - used
-        if rest > 60:
-            out.append(('figure', caption, round(rest - 28, 1)))
+        if rest > 60:  # 도면 제목·간격 17mm + 여유 8mm를 빼고 남은 높이만큼 상자
+            out.append(('figure', caption, round(rest - 25, 1)))
 
     cap = f'< {name} 위치도 >' if name else '< 위치도 >'
     for b in styled:

@@ -434,7 +434,7 @@ def main():
     sty2 = A04.lh_style.restyle(b45, '1쪽 보고서')
     figs = [x for x in sty2 if x[0] == 'figure']
     assert figs and all(40 < x[2] < 230 for x in figs), figs
-    assert 'KEEP_WORD' in HF.keep_word('breakNonLatinWord="BREAK_WORD"')
+    assert HF.keep_word('breakNonLatinWord="KEEP_WORD"') == 'breakNonLatinWord="BREAK_WORD"'  # HWPX: BREAK_WORD = 어절 단위
     assert 'wordWrap' in __import__('zipfile').ZipFile(__import__('io').BytesIO(
         A04.lh_style.to_docx(sty2, '1쪽 보고서'))).read('word/document.xml').decode()
     chk4 = A04.check(b44, r34, db.load_candidates(con4, '누리마루지구'), secs4, ev4)

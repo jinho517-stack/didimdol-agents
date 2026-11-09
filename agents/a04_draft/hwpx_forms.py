@@ -448,10 +448,26 @@ def _table(proto, cols, rows, F):
                          default=1)
     if lines_est * 5.2 + len(data) * 1.6 > 200:  # 한 쪽보다 긴 표: 글자처럼 취급을 끄고 쪽에서 나뉘게(빈 쪽 방지)
         head = head.replace('treatAsChar="1"', 'treatAsChar="0"', 1)
+    span, skip = {}, set()  # 같은 쟁점 묶음: 첫 칸이 빈 줄은 위 줄에 이어짐 → 비어 있는 칸끼리 합침
+    if n >= 3:
+        ri = 1
+        while ri < len(data):
+            k = 1
+            while ri + k < len(data) and not (data[ri + k][0] if data[ri + k] else ''):
+                k += 1
+            if k > 1:
+                for j in range(n):
+                    if all(not (data[ri + t][j] if j < len(data[ri + t]) else '') for t in range(1, k)):
+                        span[(ri, j)] = k
+                        skip |= {(ri + t, j) for t in range(1, k)}
+            ri += k
     for ri, row in enumerate(data):
         src = cells[0] if ri == 0 else (cells[-1] if ri == len(data) - 1 else cells[1])
         tcs = []
         for j in range(n):
+            if (ri, j) in skip:
+                continue
+            k_ = span.get((ri, j), 1)
             v = row[j] if j < len(row) else ''
             numeric = ri > 0 and num_col[j] and bool(re.fullmatch(r'[\d,.]+', v))
             c = src[0] if j == 0 else (src[-1] if j == n - 1 else (src[2] if numeric and len(src) > 2 else src[1]))
@@ -463,8 +479,13 @@ def _table(proto, cols, rows, F):
             squeeze = j in over and (_two_lines(v, font) if ri == 0 else _glyphs(v, font)) + pad > widths[j]  # 이 칸만 넘침
             c = re.sub(r'charPrIDRef="(\d+)"',
                        lambda m: f'charPrIDRef="{F.tight_char(m.group(1), size, OVER_SP if squeeze else None)}"', c)
+            lines_ = _cell_lines(ri, j, len(data), n)
+            if k_ > 1:  # 합친 칸: 아래 선은 마지막 줄 기준, 높이는 줄 수만큼
+                lines_['bottom'] = _cell_lines(ri + k_ - 1, j, len(data), n)['bottom']
+                c = re.sub(r'<hp:cellSpan colSpan="(\d+)" rowSpan="\d+"/>', rf'<hp:cellSpan colSpan="\g<1>" rowSpan="{k_}"/>', c, count=1)
+                c = re.sub(r'(<hp:cellSz width="\d+" height=")(\d+)', lambda m: m.group(1) + str(int(m.group(2)) * k_), c, count=1)
             c = re.sub(r'(<hp:tc [^>]*?borderFillIDRef=")(\d+)',
-                       lambda m: m.group(1) + F.border(m.group(2), _cell_lines(ri, j, len(data), n)), c, count=1)
+                       lambda m: m.group(1) + F.border(m.group(2), lines_), c, count=1)
             if margin != side:  # 칸마다 따로 여백을 쓰는 경우까지 맞춘다
                 c = re.sub(r'(<hp:cellMargin left=")\d+(" right=")\d+', rf'\g<1>{margin}\g<2>{margin}', c, count=1)
             c = re.sub(r'<hp:cellAddr colAddr="\d+" rowAddr="\d+"/>', f'<hp:cellAddr colAddr="{j}" rowAddr="{ri}"/>', c)
@@ -499,8 +520,9 @@ def _body_roles(F, start=0):
 
 
 def keep_word(header):
-    """문단 모양 전부: 한글 줄 나눔을 글자 단위(BREAK_WORD) → 어절 단위(KEEP_WORD)로"""
-    return header.replace('breakNonLatinWord="BREAK_WORD"', 'breakNonLatinWord="KEEP_WORD"')
+    """문단 모양 전부: 한글 줄 나눔을 어절 단위로. HWPX 값은 이름과 반대로 BREAK_WORD가 '어절', KEEP_WORD가 '글자'
+    (담당자 수정본 본문 문단이 BREAK_WORD, 11-09 한글 PDF에서 KEEP_WORD는 단어 중간에서 잘림을 확인)"""
+    return header.replace('breakNonLatinWord="KEEP_WORD"', 'breakNonLatinWord="BREAK_WORD"')
 
 
 def _figure(proto, height_mm, F):
