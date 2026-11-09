@@ -637,7 +637,14 @@ def llm_opinion(blocks, cfg=None):
 
 
 # ---------- 텍스트 / 화면 미리보기 ----------
+def _plain_blocks(blocks):
+    """강조 표시(**)를 지운 블록(기본 양식 한글·워드·미리보기·글에서 씀)"""
+    return [tuple(x.replace('**', '') if isinstance(x, str) else x for x in b) if b[0] in ('b', 's', 'act', 'summary', 'note') else b
+            for b in blocks]
+
+
 def line(b):
+    b = _plain_blocks([b])[0]
     k = b[0]
     if k == 'title':
         return b[1]
@@ -667,6 +674,7 @@ def to_text(blocks):
 
 
 def to_html(blocks):
+    blocks = _plain_blocks(blocks)
     e = html.escape
     out = []
     for b in blocks:
@@ -699,6 +707,7 @@ def to_html(blocks):
 
 # ---------- 워드(docx) ----------
 def to_docx(blocks):
+    blocks = _plain_blocks(blocks)
     import docx
     from docx.enum.table import WD_TABLE_ALIGNMENT
     from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -814,6 +823,7 @@ def _fill(seg, texts):
 
 
 def to_hwpx(blocks, template=TEMPLATE):
+    blocks = _plain_blocks(blocks)
     with zipfile.ZipFile(template) as z:
         infos = z.infolist()
         files = {i.filename: z.read(i.filename) for i in infos}

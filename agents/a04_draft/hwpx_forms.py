@@ -552,14 +552,8 @@ def _body_para(seg, text, F, lead):
         return _fill(seg, [lead + text])
     cid = m.group(1)
     small = F.char(cid, height=SK.hwp(SK.load()['settings']['body']['paren_pt']))
-    runs = [(cid, lead)]
-    key = re.match(r'(\((?![\d’\'])[^()]{1,14}\))\s*', text)
-    if key:
-        runs.append((F.char(cid, bold=True), key.group(1) + ' '))
-        text = text[key.end():]
-    for part in re.split(r'(\([^()]*\))', text):
-        if part:
-            runs.append((small if part.startswith('(') and part.endswith(')') else cid, part))
+    bold = F.char(cid, bold=True)
+    runs = [(cid, lead)] + [({'small': small, 'key': bold, 'bold': bold}.get(k, cid), t) for t, k in lh_style.body_parts(text)]
     xml = ''.join(f'<hp:run charPrIDRef="{c}"><hp:t>{escape(t)}</hp:t></hp:run>' for c, t in runs)
     return seg[:m.start()] + xml + seg[m.end():]
 

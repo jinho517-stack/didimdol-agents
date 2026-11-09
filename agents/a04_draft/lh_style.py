@@ -215,9 +215,9 @@ def to_html(blocks, form):
             key = f'<b>({e(b[1])})</b> ' if b[1] and b[2] else (f'<b>{e(b[1])}</b>' if b[1] else '')
             o.append(f'<div class="sq">□ {key}{pp(e(b[2]))}</div>')
         elif k == 'o':
-            o.append(f'<div class="o">ㅇ {pp(e(b[1]))}</div>')
+            o.append(f'<div class="o">ㅇ {html_parts(b[1])}</div>')
         elif k == 'dash':
-            o.append(f'<div class="dash">- {pp(e(b[1]))}</div>')
+            o.append(f'<div class="dash">- {html_parts(b[1])}</div>')
         elif k == 'note':
             o.append(f'<div class="note">* {e(b[1])}</div>')
         elif k == 'table':
@@ -247,6 +247,42 @@ PAREN = re.compile(r'(\([^()]*\d[^()]*\))')  # 괄호 안 수치·세부: (3.4km
 def pp(html_text):
     """미리보기: 괄호 안 수치·세부를 작은 글자로"""
     return PAREN.sub(r'<span class="pp">\1</span>', html_text)
+
+
+KEY = re.compile(r'\((?![\d’\'])[^()]{1,14}\)\s*')
+BOLD = re.compile(r'(\*\*.+?\*\*)')
+SMALL = re.compile(r'(\([^()]*\))')
+
+
+def body_parts(text):
+    """본문 꼭지 글 → [(글, 모양)]: 'key' (핵심어) 굵게, 'bold' **강조** 굵게, 'small' 괄호 안 작은 글자, '' 보통.
+    담당자 수정본: (사업 현황) 굵게, 핵심어구 1~2개 굵게, 괄호 안(수치·지정권자 등)은 작은 글자."""
+    out = []
+    m = KEY.match(text or '')
+    if m:
+        out.append((m.group().rstrip() + ' ', 'key'))
+        text = text[m.end():]
+    for part in BOLD.split(text or ''):
+        if not part:
+            continue
+        if BOLD.fullmatch(part):
+            out.append((part[2:-2], 'bold'))
+            continue
+        for q in SMALL.split(part):
+            if q:
+                out.append((q, 'small' if SMALL.fullmatch(q) else ''))
+    return out
+
+
+def plain(text):
+    """강조 표시(**)만 지운 글"""
+    return (text or '').replace('**', '')
+
+
+def html_parts(text):
+    e = html.escape
+    return ''.join(f'<b>{e(t)}</b>' if k in ('key', 'bold') else (f'<span class="pp">{e(t)}</span>' if k == 'small' else e(t))
+                   for t, k in body_parts(text))
 
 
 def skill_css():
@@ -304,10 +340,13 @@ def to_docx(blocks, form):
             rf.set(qn(a), name)
 
     def body_runs(p, text):
-        """본문 꼭지: 괄호 안 수치·세부는 작은 글자(스킬 body.paren_pt, 굵게 안 함), 나머지는 본문 글자."""
-        for part in PAREN.split(text):
-            if part:
-                font(p.add_run(part), BODY, BT['paren_pt'] if PAREN.fullmatch(part) else BS)
+        """본문 꼭지: (핵심어)·**강조** 굵게, 괄호 안은 작은 글자(스킬 body.paren_pt), 나머지는 본문 글자."""
+        lead = re.match(r'^[ㅇ\-]\s', text or '')
+        if lead:
+            font(p.add_run(lead.group()), BODY, BS)
+            text = text[lead.end():]
+        for part, kind in body_parts(text):
+            font(p.add_run(part), BODY, BT['paren_pt'] if kind == 'small' else BS, kind in ('key', 'bold'))
 
     def para(text='', name=BODY, size=15, bold=False, align=None, before=0, left=0.0, hanging=0.0, line=LS):
         p = d.add_paragraph()

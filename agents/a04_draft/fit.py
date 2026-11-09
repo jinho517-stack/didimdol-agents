@@ -25,7 +25,7 @@ def writing():
 def em(text, paren_scale=13 / 15):
     """글의 폭(칸). 괄호 안은 작은 글자."""
     w, depth = 0.0, 0
-    for ch in text or '':
+    for ch in (text or '').replace('**', ''):
         if ch in '(（':
             depth += 1
         s = paren_scale if depth > 0 else 1.0

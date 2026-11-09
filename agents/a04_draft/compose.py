@@ -174,7 +174,7 @@ def _blocks(sec):
     """AI 목차 → 블록"""
     out = []
     for it in sec.get('items') or []:
-        key, text = str(it.get('key') or '').strip().strip('()') or None, _fix(str(it.get('text') or ''))
+        key, text = str(it.get('key') or '').replace('**', '').strip().strip('()') or None, _fix(str(it.get('text') or ''))
         if not text:
             continue
         out.append(('b', key, text))
@@ -218,7 +218,7 @@ def _compress(bodies, ok, conflict_vals, system, cfg, rep, data_text=''):
     prompt = (f'아래 본문이 A4 1쪽을 넘는다(어림 {h:.0f}mm, 한도 {BODY_MM}mm, 지금 ㅇ {n_items}개). '
               '같은 목차 구성으로 ㅇ 꼭지를 모두 합쳐 8개 이하(목차당 2~3개)로 줄여라. 겹치는 꼭지는 합치고, 덜 중요한 내용(붙임 표에 있는 수치 변경 등)은 뺀다. '
               '"-" 세부는 쓰지 않는다. 꼭지마다 (핵심어) 포함 48~60칸(두 줄에 가깝게, 두 줄 넘지 않게; 한글 1칸·띄어쓰기 0.5·숫자 0.55·괄호 안 0.87배). '
-              '숫자·날짜·사업명·기관명은 그대로, [자료]에 없는 숫자는 만들지 않는다.\n'
+              '숫자·날짜·사업명·기관명은 그대로, [자료]에 없는 숫자는 만들지 않는다. 꼭지마다 핵심어구 1~2개는 **어구**로 감싼다.\n'
               f'[자료]\n{data_text}\n[지금 본문]\n{json.dumps(cur, ensure_ascii=False)}\n'
               '출력 형식: {"sections": [{"title": "...", "items": [{"key": "...", "text": "...", "subs": []}]}]}')
     try:
@@ -259,7 +259,7 @@ def _refit(bodies, ok, conflict_vals, system, cfg, rep, data_text='', rounds=2):
                   f'- - 세부(subs)는 하나에 {int(dash_max)}칸 이내, 꼭지당 0~2개.\n'
                   '- "두 줄 넘침": 군더더기·중복을 빼거나 덜 중요한 내용을 덜어 낸다. subs는 새로 만들지 않는다(원래 있던 subs만 유지·합치기).\n'
                   '- "짧음": subs의 내용을 본문에 합치거나, [자료]에 있는 같은 주제의 사유·기관·조건·일정을 보태 두 줄에 가깝게 채운다.\n'
-                  '- 숫자·날짜·사업명·기관명은 그대로 쓰고 [자료]에 없는 숫자를 만들지 않는다. 핵심어(key)는 바꾸지 않는다. 개조식 끝맺음.\n'
+                  '- 숫자·날짜·사업명·기관명은 그대로 쓰고 [자료]에 없는 숫자를 만들지 않는다. 핵심어(key)는 바꾸지 않는다. 개조식 끝맺음. **강조** 표시는 그대로 두거나 핵심어구 1~2개에 다시 붙인다.\n'
                   f'[자료]\n{data_text}\n[고칠 꼭지]\n{json.dumps(jobs, ensure_ascii=False)}\n'
                   '출력 형식: {"items": [{"id": "...", "text": "...", "subs": ["..."]}]}')
         try:
@@ -302,7 +302,7 @@ def _attach(new, att, ok, conflict_vals, rep):
              ('추진 경위·일정', 'schedule', '추진 경위 및 향후 일정', ['시기', '추진 내용', '비고'], ('시기', '내용', '비고'), 12))
     rep['attach'] = {}
     for label, key, cap, cols, fields, mx in plans:
-        rows = [[_fix(str(r.get(f) or '')).strip() if f != '시기' else _dates(str(r.get(f) or '')).strip() for f in fields]
+        rows = [[_fix(str(r.get(f) or '').replace('**', '')).strip() if f != '시기' else _dates(str(r.get(f) or '')).strip() for f in fields]
                 for r in (att.get(key) or []) if isinstance(r, dict)]
         rows = [r for r in rows if any(r) and safe(r)][:mx]
         i = next((k for k, b in enumerate(new) if b[0] == 'h' and b[1].startswith('붙임') and b[1].endswith(label)), None)
@@ -351,9 +351,11 @@ def run(blocks, res3, events, cands, district, cfg=None, kinds=None, sections=BO
         '7. ◈ 핵심요약: "(무엇) (현안 검토/추진 현황) 결과를 보고 드림" 또는 "~ 내용을 보고 드림" 한 문장, 숫자 없이.\n'
         '8. 붙임 표(각 표가 A4 한 쪽 안에, 칸마다 짧게 — 13pt 표 한 줄에 들어가게): '
         '"issues"는 관계기관 쟁점 표 행(자료의 관계기관 쟁점만): 쟁점 2~8자, 관계기관 2~6자, 의견 28자 이내, LH의견 24자 이내, '
-        '같은 쟁점의 둘째 행부터 쟁점·LH의견은 빈 문자열, 겹치는 의견은 합쳐 최대 10행. LH·사업시행자 입장은 관계기관 행으로 쓰지 말고 LH의견 칸에 쓴다. '
+        '같은 쟁점의 둘째 행부터 쟁점·LH의견은 빈 문자열, 겹치는 의견은 합쳐 최대 10행. LH·사업시행자 입장은 관계기관 행으로 쓰지 말고 LH의견 칸에 쓴다. 각 행의 의견·LH의견은 그 행의 쟁점에 관한 것만 쓴다(다른 쟁점 내용을 끼워 넣지 않음). '
         '"schedule"은 추진 경위·일정 표 행: 시기(’26.6월·’26. 下·’26.6월~’26.8월 표기), 내용 20자 이내, 비고 12자 이내(없으면 빈 문자열), '
         '최근 실적 3~4건 + 보고 날짜 이후 일정, 같은 일은 한 번만, 날짜순 최대 12행.\n'
+        '9. 꼭지마다 상급자가 꼭 봐야 할 핵심어구 1~2개(결정·쟁점·핵심 수치, 4~12자)를 **어구**처럼 별표 두 개로 감싼다(수정본의 굵은 글씨). '
+        '(핵심어)와 괄호 안은 감싸지 않는다.\n'
         '출력 형식: {"summary": "...", "sections": [{"title": "추진 현황 및 문제점", "items": [{"key": "사업 현황", "text": "...", "subs": []}]}], '
         '"attach": {"issues": [{"쟁점": "", "관계기관": "", "의견": "", "LH의견": ""}], "schedule": [{"시기": "", "내용": "", "비고": ""}]}}')
     t0 = time.time()
@@ -422,7 +424,7 @@ def run(blocks, res3, events, cands, district, cfg=None, kinds=None, sections=BO
         new[i + 1:j] = out_b
         rep['written'].append(name)
     _attach(new, out.get('attach') or {}, ok, conflict_vals, rep)  # 붙임 표: 한 쪽 안으로 간추린 표
-    summ = str(out.get('summary') or '').strip().lstrip('◈ ').strip()
+    summ = str(out.get('summary') or '').replace('**', '').strip().lstrip('◈ ').strip()
     if summ and not NUM.search(summ) and summ.endswith('보고 드림'):
         new = [('summary', summ) if b[0] == 'summary' else b for b in new]
         rep['summary'] = summ
