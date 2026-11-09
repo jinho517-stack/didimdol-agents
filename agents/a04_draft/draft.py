@@ -123,7 +123,11 @@ INFO_ITEMS = ('담당시행자', '관리상태', '추진단계')  # 추진현황
 
 
 def _ev_date(d):
-    """2026.9 → ’26.9월, 2026.9.17 → ’26. 9. 17., 2026 하반기 → ’26. 下, 상반기 → ’26. 上 (스킬 문장 규칙 10)"""
+    """2026.9 → ’26.9월, 2026.9.17 → ’26. 9. 17., 2026 하반기 → ’26. 下, 상반기 → ’26. 上 (스킬 문장 규칙 10)
+    기간 2027.6~2028.6 → ’27.6월~’28.6월"""
+    if d and '~' in d:
+        a, _, z = d.partition('~')
+        return f'{_ev_date(a.strip())}~{_ev_date(z.strip())}'
     m = re.fullmatch(r'20(\d\d)\.(\d{1,2})\.(\d{1,2})', d or '')
     if m:
         return f'’{m.group(1)}. {int(m.group(2))}. {int(m.group(3))}.'
@@ -830,6 +834,8 @@ def to_hwpx(blocks, template=TEMPLATE):
     n = iter(range(3121190098, 3121190098 + 100000))
     body = ''.join(re.sub(r'^<hp:p id="\d+"', lambda m: f'<hp:p id="{next(n)}"', s) for s in out)
     files['Contents/section0.xml'] = (head + body + tail).encode('utf-8')
+    files['Contents/header.xml'] = files['Contents/header.xml'].decode('utf-8').replace(
+        'breakNonLatinWord="BREAK_WORD"', 'breakNonLatinWord="KEEP_WORD"').encode('utf-8')  # 어절 단위 줄바꿈
     title = next((b[1] for b in blocks if b[0] == 'title'), '보고서')
     files['Preview/PrvText.txt'] = to_text(blocks)[:1000].encode('utf-8')
     hpf = files['Contents/content.hpf'].decode('utf-8')

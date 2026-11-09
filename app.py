@@ -924,7 +924,7 @@ def report_setup(has_report):
             go = st.button('다시 만들기  →' if has_report else '초안 만들기  →', type='primary', width='stretch')
     if go:
         o.update(title=title, date=parse_kdate(dtxt))
-        with st.spinner('DB 값으로 초안을 쓰는 중…' + (' (AI가 담당자 수정본 문체로 본문을 쓰는 중, 20~60초)' if o['use_polish'] else '')):
+        with st.spinner('DB 값으로 초안을 쓰는 중…' + (' (AI가 담당자 수정본 문체로 본문을 쓰는 중, 30~90초)' if o['use_polish'] else '')):
             make_report(district, o)
         st.rerun()
 

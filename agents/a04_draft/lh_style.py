@@ -101,6 +101,9 @@ def restyle(blocks, form):
             out.append(('note', re.sub(r'^주\)\s*', '', b[1])))
         elif k == 'table':
             out.append(b)
+    if kind in ('short', 'onepage'):  # 담당자 원칙: 쪽 안 빈 곳 없이 — 크게 비면 도면 넣을 자리(fit.add_figures)
+        from agents.a04_draft import fit
+        out = fit.add_figures(out, meta.get('district', ''))
     return out
 
 
@@ -222,6 +225,8 @@ def to_html(blocks, form):
             rows = ''.join('<tr>' + ''.join(f'<td class="{"n" if re.fullmatch(r"[\d,.]+", str(c)) else ""}">{e(c)}</td>'
                                             for c in r) + '</tr>' for r in b[3])
             o.append(f'<div class="cap">&lt; {e(b[1])} &gt;</div><table><tr>{head}</tr>{rows}</table>')
+        elif k == 'figure':  # 도면 넣을 자리(빈 상자)
+            o.append(f'<div class="cap">{e(b[1])}</div><div class="fig" style="height:{b[2] * 3.6:.0f}px">도면 넣을 자리</div>')
         elif k == 'presshead':
             o.append(f'<div class="ph hd">보도자료</div><div class="pd">배포 &nbsp; {e(b[1])}</div><div class="pline"></div>')
         elif k == 'ptitle':
@@ -231,7 +236,9 @@ def to_html(blocks, form):
         elif k == 'contact':
             o.append(f'<table class="ct2"><tr><td>담당부서</td><td>{e(b[1])}</td><td>책임자</td><td>팀장 ______ ( - - )</td></tr>'
                      f'<tr><td></td><td></td><td>담당자</td><td>______ ( - - )</td></tr></table>')
-    return CSS + skill_css() + '<div class="lh">' + ''.join(o) + '</div>'
+    fig = ('<style>.lh{word-break:keep-all}.lh .fig{border:1px solid #333;display:flex;align-items:center;'
+           'justify-content:center;color:#aaa;font-size:12px;margin:4px 0 6px}</style>')  # 어절 단위 줄바꿈
+    return CSS + skill_css() + fig + '<div class="lh">' + ''.join(o) + '</div>'
 
 
 PAREN = re.compile(r'(\([^()]*\d[^()]*\))')  # 괄호 안 수치·세부: (3.4km, 820억원), (’32.6월 예정)
@@ -439,6 +446,16 @@ def to_docx(blocks, form):
                 for i, v in enumerate(r):
                     num = re.fullmatch(r'[\d,.]+', str(v))
                     cell_text(cells[i], str(v), tsize, align=WD_ALIGN_PARAGRAPH.RIGHT if num else WD_ALIGN_PARAGRAPH.CENTER, tight=True)
+        elif k == 'figure':  # 도면 넣을 자리: 제목 + 높이를 정한 빈 상자
+            para(b[1], NOTE, 14, align=WD_ALIGN_PARAGRAPH.CENTER, before=8)
+            t = d.add_table(rows=1, cols=1)
+            t.style = 'Table Grid'
+            t.alignment = WD_TABLE_ALIGNMENT.RIGHT
+            tr_pr = t.rows[0]._tr.get_or_add_trPr()
+            hgt = OxmlElement('w:trHeight')
+            hgt.set(qn('w:val'), str(round(b[2] / 25.4 * 1440)))
+            hgt.set(qn('w:hRule'), 'exact')
+            tr_pr.append(hgt)
         elif k == 'presshead':
             t = d.add_table(rows=1, cols=1)
             t.style = 'Table Grid'
@@ -461,6 +478,13 @@ def to_docx(blocks, form):
                 cell_text(t.cell(r, c), v, 12, name=BODY)
             t.cell(0, 0).merge(t.cell(1, 0))
             t.cell(0, 1).merge(t.cell(1, 1))
+    # 어절 단위 줄바꿈(단어 중간에서 줄이 바뀌지 않게): 모든 문단에 '한글 단어 잘림 허용' 끔
+    for p_el in d.element.body.iter(qn('w:p')):
+        ppr = p_el.get_or_add_pPr()
+        if ppr.find(qn('w:wordWrap')) is None:
+            ww = OxmlElement('w:wordWrap')
+            ww.set(qn('w:val'), '0')
+            ppr.append(ww)
     buf = BytesIO()
     d.save(buf)
     return buf.getvalue()
@@ -511,6 +535,8 @@ def to_text(blocks):
             out.append(f'{sym[k]} {b[1]}')
         elif k == 'table':
             out += [f'< {b[1]} >', ' | '.join(b[2])] + [' | '.join(map(str, r)) for r in b[3]]
+        elif k == 'figure':
+            out.append(f'{b[1]} [도면 넣을 자리]')
         elif k == 'presshead':
             out += ['보도자료', '배포 ' + b[1]]
         elif k == 'psub':

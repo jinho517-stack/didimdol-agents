@@ -423,6 +423,20 @@ def main():
     assert '9,999' not in t6 and len(rp['dropped']) == 1 and rp['written'] == ['추진 현황 및 문제점', '대응 방향'], rp
     assert '□ 향후 계획' in t6 and '붙임 1 사업 개요' in t6 and '현안 검토 결과를 보고 드림' in t6
     assert b47 == b45 and rp2['error']
+    # 담당자 원칙(v3): 꼭지 폭(수정본 예시는 두 줄 안·두 줄에 가깝게), 어절 줄바꿈, 빈 곳에 도면 자리
+    from agents.a04_draft import fit, hwpx_forms as HF
+    ex = [l.strip()[2:] for f in sorted(CP.EXAMPLES.glob('*.txt')) for l in f.read_text(encoding='utf-8').splitlines()
+          if l.strip().startswith('ㅇ (')]
+    assert ex and all(fit.em(x) <= 62 for x in ex), [round(fit.em(x), 1) for x in ex]
+    assert CP._cut('사업 현황', '가' * 40 + ', ' + '나' * 30)[1] and not CP._cut('종점', '가나다, 라마')[1]
+    assert CP._fix('’27 상반기 협의, ’27 上 착공') == '’27. 上 협의, ’27. 上 착공'
+    assert CP._past_only('’26.6월 변경(안) 마련, ’26.7월 협의', '2026-11-09') and not CP._past_only('’26.12월 협의', '2026-11-09')
+    sty2 = A04.lh_style.restyle(b45, '1쪽 보고서')
+    figs = [x for x in sty2 if x[0] == 'figure']
+    assert figs and all(40 < x[2] < 230 for x in figs), figs
+    assert 'KEEP_WORD' in HF.keep_word('breakNonLatinWord="BREAK_WORD"')
+    assert 'wordWrap' in __import__('zipfile').ZipFile(__import__('io').BytesIO(
+        A04.lh_style.to_docx(sty2, '1쪽 보고서'))).read('word/document.xml').decode()
     chk4 = A04.check(b44, r34, db.load_candidates(con4, '누리마루지구'), secs4, ev4)
     assert all(c['결과'] == '통과' for c in chk4 if c['점검'] != '미확정 표시'), chk4
     con4.close()

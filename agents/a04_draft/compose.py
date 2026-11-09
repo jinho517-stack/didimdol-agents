@@ -15,7 +15,7 @@ import re
 import time
 from pathlib import Path
 
-from agents.a04_draft import draft
+from agents.a04_draft import draft, fit
 from agents.a04_draft import skill as SK
 from common import llm
 from common.fmt import fmt_value
@@ -101,22 +101,47 @@ def payload(res3, events, cands, district, kinds):
     return out, pending
 
 
-LONG = 100  # 꼭지가 이보다 길면(두 줄 넘김) 쉼표에서 나눠 뒷부분을 '-' 세부로
-
-
-def _cut(text):
-    """긴 꼭지 → (앞, [뒤]). 앞부분이 LONG 안에 들도록 마지막 쉼표에서 자른다(괄호 안 쉼표는 건너뜀)."""
-    if len(text) <= LONG:
+def _cut(key, text):
+    """두 줄을 넘는 꼭지 → (앞, [뒤]). 앞부분이 두 줄 폭 안에 드는 마지막 쉼표에서 자르고 뒤는 '-' 세부로(괄호 안 쉼표는 건너뜀)."""
+    mx = fit.writing()['max_em']
+    if fit.item_em(key, text) <= mx:
         return text, []
     depth, cuts = 0, []
     for i, ch in enumerate(text):
-        depth += ch in '(（' and 1 or (-1 if ch in ')）' else 0)
-        if ch == ',' and depth == 0 and 25 <= i <= LONG:
+        depth += 1 if ch in '(（' else (-1 if ch in ')）' else 0)
+        if ch == ',' and depth == 0 and 20 <= fit.item_em(key, text[:i]) <= mx:
             cuts.append(i)
     if not cuts:
         return text, []
     i = cuts[-1]
     return draft.gaejo(text[:i]), [draft.gaejo(text[i + 1:].strip())]
+
+
+def _groups(body):
+    """본문 블록 → 꼭지 묶음 [(시작 위치, 끝 위치)] — ㅇ 하나와 그 아래 '-' 세부"""
+    starts = [i for i, b in enumerate(body) if b[0] == 'b'] + [len(body)]
+    return [(starts[k], starts[k + 1]) for k in range(len(starts) - 1)]
+
+
+def _width_job(bodies):
+    """폭이 맞지 않는 꼭지: ㅇ가 두 줄 넘김(60칸 초과)·한 줄 반 남짓(48칸 미만), 또는 '-' 세부가 두 줄 넘김"""
+    jobs, w = [], fit.writing()
+    for name, body in bodies.items():
+        for a, z in _groups(body):
+            b = body[a]
+            ok_max, ok_min, width = fit.fits(b[1], b[2], 'o')
+            subs = [x[1] for x in body[a + 1:z] if x[0] == 's']
+            sub_over = [round(fit.em(t), 1) for t in subs if not fit.fits(None, t, 'dash')[0]]
+            # 담당자 원칙 2: '-' 세부도 두 줄에 가깝게 — 한 줄 남짓한 세부는 위 꼭지에 합치거나 채우게 한다
+            sub_short = [round(fit.em(t), 1) for t in subs if fit.em(t) < w['min_em'] * fit.LINE_EM['dash'] / fit.LINE_EM['o']]
+            if ok_max and ok_min and not sub_over and not sub_short:
+                continue
+            jobs.append({'id': f'{name}|{a}|{z}', 'key': b[1] or '', 'text': b[2], 'width': width, 'subs': subs,
+                         'problem': ('두 줄 넘침' if not ok_max else ('짧음' if not ok_min else '')) +
+                                    (f' / 세부 두 줄 넘침{sub_over}' if sub_over else '') +
+                                    (f' / 세부 짧음{sub_short}(본문에 합치거나 두 줄 가깝게)' if sub_short else ''),
+                         'target': f"ㅇ {w['min_em']}~{w['max_em']}칸"})
+    return jobs
 
 
 def _past_only(line, report_date):
@@ -135,6 +160,7 @@ def _past_only(line, report_date):
 def _fix(text):
     """스킬 날짜 표기: ’27 상반기 → ’27. 上, 2027년 하반기 → ’27. 下"""
     text = re.sub(r"(?:’|20)(\d\d)년?\s*(상|하)반기", lambda m: f"’{m.group(1)}. {'上' if m.group(2) == '상' else '下'}", text)
+    text = re.sub(r"’(\d\d)\s*([上下])", r"’\1. \2", text)  # ’27 上 → ’27. 上
     return draft.gaejo(text)
 
 
@@ -145,11 +171,118 @@ def _blocks(sec):
         key, text = str(it.get('key') or '').strip().strip('()') or None, _fix(str(it.get('text') or ''))
         if not text:
             continue
-        text, more = _cut(text)
         out.append(('b', key, text))
-        out += [('s', m) for m in more if m]
         out += [('s', _fix(str(s))) for s in (it.get('subs') or []) if str(s).strip()]
     return out
+
+
+BODY_MM = 250 - 32 - 16  # 1쪽에서 머리(제목·결재란)·◈ 요약을 뺀 높이
+
+
+def body_mm(bodies):
+    """본문(□ 목차들) 높이 어림(mm) — fit.block_mm과 같은 기준"""
+    h = 0.0
+    for body in bodies.values():
+        h += fit.GAP_MM['sq'] + fit.LINE_MM
+        for b in body:
+            if b[0] == 'b':
+                h += fit.GAP_MM['o'] + fit.lines(fit.item_em(b[1], b[2]), 'o') * fit.LINE_MM
+            elif b[0] == 's':
+                h += fit.GAP_MM['dash'] + fit.lines(fit.em(b[1]), 'dash') * fit.LINE_MM
+    return round(h, 1)
+
+
+def _compress(bodies, ok, conflict_vals, system, cfg, rep, data_text=''):
+    """본문이 1쪽을 넘으면 AI에게 꼭지를 합치고 덜 중요한 것을 빼 1쪽(ㅇ 8~9개)에 맞추게 한다. 숫자 검사를 통과해야 바꾼다."""
+    h = body_mm(bodies)
+    rep['page'] = {'before_mm': h, 'limit_mm': BODY_MM}
+    if h <= BODY_MM:
+        return
+    cur = [{'title': n, 'items': [{'key': b[1], 'text': b[2], 'subs': []} if b[0] == 'b' else None for b in body]}
+           for n, body in bodies.items()]
+    for sec, (n, body) in zip(cur, bodies.items()):  # 세부를 위 꼭지에 붙여 보여 줌
+        items = []
+        for b in body:
+            if b[0] == 'b':
+                items.append({'key': b[1], 'text': b[2], 'subs': []})
+            elif b[0] == 's' and items:
+                items[-1]['subs'].append(b[1])
+        sec['items'] = items
+    n_items = sum(len(x['items']) for x in cur)
+    prompt = (f'아래 본문이 A4 1쪽을 넘는다(어림 {h:.0f}mm, 한도 {BODY_MM}mm, 지금 ㅇ {n_items}개). '
+              '같은 목차 구성으로 ㅇ 꼭지를 모두 합쳐 8개 이하(목차당 2~3개)로 줄여라. 겹치는 꼭지는 합치고, 덜 중요한 내용(붙임 표에 있는 수치 변경 등)은 뺀다. '
+              '"-" 세부는 쓰지 않는다. 꼭지마다 (핵심어) 포함 48~60칸(두 줄에 가깝게, 두 줄 넘지 않게; 한글 1칸·띄어쓰기 0.5·숫자 0.55·괄호 안 0.87배). '
+              '숫자·날짜·사업명·기관명은 그대로, [자료]에 없는 숫자는 만들지 않는다.\n'
+              f'[자료]\n{data_text}\n[지금 본문]\n{json.dumps(cur, ensure_ascii=False)}\n'
+              '출력 형식: {"sections": [{"title": "...", "items": [{"key": "...", "text": "...", "subs": []}]}]}')
+    try:
+        out = llm.ask_json(prompt, system=system, cfg=cfg)
+    except Exception as e:
+        rep['page']['error'] = str(e)[:200]
+        return
+    got = {str(x.get('title', '')).strip('□ ').strip(): x for x in (out.get('sections') or []) if isinstance(x, dict)}
+    new = {}
+    for n in bodies:
+        if n not in got:
+            return
+        body = _blocks(got[n])
+        lines = [(b[1] or '') + ' ' + b[2] if b[0] == 'b' else b[1] for b in body]
+        if not body or any(bad_numbers(l, ok) for l in lines) or \
+                any(x.replace(',', '') in conflict_vals and '확인 필요' not in l for l in lines for x in NUM.findall(l)):
+            return  # 하나라도 어긋나면 줄이기 전 본문을 그대로 씀
+        new[n] = body
+    if body_mm(new) < h:
+        bodies.update(new)
+        rep['page']['after_mm'] = body_mm(new)
+
+
+def _refit(bodies, ok, conflict_vals, system, cfg, rep, data_text='', rounds=2):
+    """폭이 안 맞는 꼭지만 AI에게 다시 쓰게 한다(꼭지 단위, 최대 2번). 숫자·폭 검사를 통과한 것만 바꾼다."""
+    w = fit.writing()
+    mid = (w['max_em'] + w['min_em']) / 2
+    dash_max = w['max_em'] * fit.LINE_EM['dash'] / fit.LINE_EM['o']
+    rep['refit'] = {'asked': 0, 'fixed': 0}
+    for _ in range(rounds):
+        jobs = _width_job(bodies)
+        if not jobs:
+            return
+        rep['refit']['asked'] += len(jobs)
+        prompt = ('아래 보고서 꼭지들의 길이를 고쳐라. 폭은 "칸"으로 센다: 한글 1칸, 띄어쓰기 0.5칸, 숫자·영문 0.55칸, 괄호 안 글자 0.87배. '
+                  '본문 한 줄은 31칸이다.\n'
+                  f'- ㅇ 본문(text)은 (핵심어) 포함 {w["min_em"]}~{w["max_em"]}칸: 두 줄을 넘지 않되 두 줄에 최대한 가깝게.\n'
+                  f'- - 세부(subs)는 하나에 {int(dash_max)}칸 이내, 꼭지당 0~2개.\n'
+                  '- "두 줄 넘침": 군더더기·중복을 빼거나 덜 중요한 내용을 덜어 낸다. subs는 새로 만들지 않는다(원래 있던 subs만 유지·합치기).\n'
+                  '- "짧음": subs의 내용을 본문에 합치거나, [자료]에 있는 같은 주제의 사유·기관·조건·일정을 보태 두 줄에 가깝게 채운다.\n'
+                  '- 숫자·날짜·사업명·기관명은 그대로 쓰고 [자료]에 없는 숫자를 만들지 않는다. 핵심어(key)는 바꾸지 않는다. 개조식 끝맺음.\n'
+                  f'[자료]\n{data_text}\n[고칠 꼭지]\n{json.dumps(jobs, ensure_ascii=False)}\n'
+                  '출력 형식: {"items": [{"id": "...", "text": "...", "subs": ["..."]}]}')
+        try:
+            out = llm.ask_json(prompt, system=system, cfg=cfg)
+        except Exception as e:
+            rep['refit']['error'] = str(e)[:200]
+            return
+        by = {str(x.get('id')): x for x in (out.get('items') or []) if isinstance(x, dict)}
+        changes = []
+        for j in jobs:
+            x = by.get(j['id'])
+            if not x:
+                continue
+            txt = _fix(str(x.get('text') or ''))
+            subs = [_fix(str(t)) for t in (x.get('subs') or []) if str(t).strip()][:2]
+            if not txt:
+                continue
+            lines = [(j['key'] or '') + ' ' + txt] + subs
+            if any(bad_numbers(l, ok) for l in lines) or \
+                    any(n.replace(',', '') in conflict_vals and '확인 필요' not in l for l in lines for n in NUM.findall(l)):
+                continue
+            ok_max, ok_min, width = fit.fits(j['key'] or None, txt, 'o')
+            subs_ok = all(fit.fits(None, t, 'dash')[0] for t in subs)
+            if ok_max and subs_ok and (ok_min or abs(width - mid) < abs(j['width'] - mid)):
+                name, a, z = j['id'].rsplit('|', 2)
+                changes.append((name, int(a), int(z), [('b', j['key'] or None, txt)] + [('s', t) for t in subs]))
+        for name, a, z, blk in sorted(changes, key=lambda c: -c[1]):  # 뒤에서부터 바꿔야 위치가 안 어긋남
+            bodies[name][a:z] = blk
+            rep['refit']['fixed'] += 1
 
 
 def run(blocks, res3, events, cands, district, cfg=None, kinds=None, sections=BODY, path=SK.PATH):
@@ -172,14 +305,18 @@ def run(blocks, res3, events, cands, district, cfg=None, kinds=None, sections=BO
         f'[자료(DB 최신값·문서에서 뽑은 경위·계획·쟁점)]\n{data_text}\n\n'
         f'위 자료만 써서 본문 목차 {", ".join(want)}를 써라.\n'
         '쓰는 법\n'
-        '1. 각 목차는 ㅇ 꼭지 2~5개. 꼭지마다 (핵심어) + 한 문장. 핵심어는 2~6자의 쟁점·주제(예: 사업 현황, 종점, 시행방식, 사업비, 협의, 일정, 재원). '
+        '0. 본문(□ 3개)은 A4 1쪽에 들어가게 상급자가 알아야 할 핵심만: ㅇ 꼭지는 모두 합쳐 8~9개, 목차당 2~3개, "-" 세부는 원칙적으로 쓰지 않는다(꼭 필요할 때 본문 전체 2개 이내). '
+        '사업마다 꼭지를 만들지 말고 쟁점(현황·종점·시행방식·사업비·일정 등)으로 묶는다. 덜 중요한 사업 내용은 붙임 표에 있으므로 본문에서 뺀다.\n'
+        '1. 꼭지마다 (핵심어) + 한 문장. 핵심어는 2~6자의 쟁점·주제(예: 사업 현황, 종점, 시행방식, 사업비, 협의, 일정, 재원). '
         '사업이 여럿이고 사업마다 쓸 때만 사업명을 핵심어로 쓴다.\n'
         '2. 추진 현황 및 문제점: 첫 꼭지는 (사업 현황)으로 지구 전체를 한 줄로 — 사업 수·총사업비·핵심 사업 수치를 괄호로 묶고 '
         '"~을 목표로 추진 중이나 ~ 지속"처럼 문제로 이어지게. 나머지 꼭지는 현안·쟁점·지연을 기관별 입장과 함께. 값이 바뀐 것은 "○○ → ○○"로 문장 안에.\n'
         '3. 대응 방향: 문제점 꼭지와 같은 핵심어 순서로 LH 대응방안·만회대책. 자료에 없는 대응은 지어내지 말고 "~ 검토 필요"처럼 짧게.\n'
         '4. 향후 계획: 날짜가 있는 일정을 (협의)·(일정) 등으로 묶어 ’26.6월, ’26. 下 표기로. 이미 지난 날짜(보고 날짜 이전)는 쓰지 않는다.\n'
         '5. 숫자는 자료에 있는 것만 그대로 쓴다. 더하기·빼기·추정 금지(사업 개수 세기만 허용). 문서마다 다른 값은 숫자 없이 "확인 필요".\n'
-        '6. 개조식 명사형 끝맺음(~함·~임·~예정·~필요·~요청·~지속·~검토). 한 꼭지는 두 줄(90자) 이내로 한 가지 내용만 — 넘치면 꼭지를 나누거나 "subs"(- 세부, 꼭지당 2개 이내)로 내린다. '
+        '6. 개조식 명사형 끝맺음(~함·~임·~예정·~필요·~요청·~지속·~검토). 꼭지(ㅇ·-)는 두 줄을 넘지 않되 두 줄에 최대한 가깝게 채운다. '
+        '본문 한 줄은 한글 약 31자(띄어쓰기는 반 칸, 숫자·영문·괄호 안 작은 글자는 좁음)이므로 (핵심어) 포함 공백 포함 약 62~75자가 알맞다. '
+        '넘치면 꼭지를 나누거나 "subs"(- 세부, 꼭지당 2개 이내)로 내리고, 짧으면 자료에 있는 사유·기관·조건을 보태 채운다. '
         '값이 바뀐 사실은 꼭 필요한 것만(사업비·개통·착공 등) 쓴다.\n'
         '7. ◈ 핵심요약: "(무엇) (현안 검토/추진 현황) 결과를 보고 드림" 또는 "~ 내용을 보고 드림" 한 문장, 숫자 없이.\n'
         '출력 형식: {"summary": "...", "sections": [{"title": "추진 현황 및 문제점", "items": [{"key": "사업 현황", "text": "...", "subs": []}]}]}')
@@ -194,7 +331,7 @@ def run(blocks, res3, events, cands, district, cfg=None, kinds=None, sections=BO
     rep['seconds'] = round(time.time() - t0, 1)
     ok = allowed_numbers(data_text + ' ' + title + ' ' + str(meta.get('date', '')))
     conflict_vals = {v.replace(',', '') for _, _, vs in pending for v in vs}
-    new = list(blocks)
+    new, bodies = list(blocks), {}
     got = {str(s.get('title', '')).strip('□ ').strip(): s for s in (out.get('sections') or []) if isinstance(s, dict)}
     for name in want:
         sec = got.get(name)
@@ -223,9 +360,30 @@ def run(blocks, res3, events, cands, district, cfg=None, kinds=None, sections=BO
         if not n_b or dropped > n_b:
             rep['kept_rule'].append((name, f'버린 줄이 많음({dropped}줄)' if dropped else '쓸 줄이 없음'))
             continue
+        bodies[name] = body
+    _compress(bodies, ok, conflict_vals, system, c, rep, data_text)  # 본문 1쪽 맞추기
+    _refit(bodies, ok, conflict_vals, system, c, rep, data_text)  # 두 줄에 맞추기(AI 2차) → 그래도 넘치면 쉼표에서 나눔
+    for name, body in bodies.items():
+        out_b, skip = [], False
+        for b in body:
+            line = (b[1] or '') + ' ' + b[2] if b[0] == 'b' else b[1]
+            if name == '향후 계획' and _past_only(line, meta.get('date', '')):  # 다시 쓴 뒤에도 지난 일정은 뺀다
+                rep['dropped'].append((line.strip(), '보고 날짜 이전 일정'))
+                skip = b[0] == 'b'
+                continue
+            if b[0] == 's' and skip:
+                continue
+            skip = False
+            if b[0] == 'b':
+                head, more = _cut(b[1], b[2])
+                out_b += [('b', b[1], head)] + [('s', m) for m in more if m]
+            else:
+                out_b.append(b)
+        if name == '향후 계획' and not any(b[0] == 'b' for b in out_b):
+            out_b = [('b', None, '보고 날짜 이후 일정이 문서에 없음(최신 자료 확인 필요)')]
         i = new.index(('h', f'□ {name}'))
         j = next((k for k in range(i + 1, len(new)) if new[k][0] == 'h'), len(new))
-        new[i + 1:j] = body
+        new[i + 1:j] = out_b
         rep['written'].append(name)
     summ = str(out.get('summary') or '').strip().lstrip('◈ ').strip()
     if summ and not NUM.search(summ) and summ.endswith('보고 드림'):

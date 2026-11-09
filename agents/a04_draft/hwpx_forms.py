@@ -192,7 +192,8 @@ class Form:
         body = ''.join(re.sub(r'<hp:tbl id="\d+"', lambda m: f'<hp:tbl id="{next(ids)}"', s) for s in body_segs)
         files = dict(self.files)
         files['Contents/section0.xml'] = (self.head + body + self.tail).encode('utf-8')
-        files['Contents/header.xml'] = self.header.encode('utf-8')
+        # 어절 단위 줄바꿈(담당자 원칙: 단어 중간에서 줄이 바뀌지 않게)
+        files['Contents/header.xml'] = keep_word(self.header).encode('utf-8')
         if 'Preview/PrvText.txt' in files:
             files['Preview/PrvText.txt'] = preview[:1000].encode('utf-8')
         if 'Contents/content.hpf' in files:
@@ -438,10 +439,37 @@ def _body_roles(F, start=0):
     return roles, gaps
 
 
+def keep_word(header):
+    """문단 모양 전부: 한글 줄 나눔을 글자 단위(BREAK_WORD) → 어절 단위(KEEP_WORD)로"""
+    return header.replace('breakNonLatinWord="BREAK_WORD"', 'breakNonLatinWord="KEEP_WORD"')
+
+
+def _figure(proto, height_mm, F):
+    """도면 넣을 자리: 견본 표의 본문 칸 하나로 빈 상자(네 변 가는 선, 바탕 없음)를 만든다."""
+    trs = re.findall(r'<hp:tr>.*?</hp:tr>', proto, S)
+    cell = re.findall(r'<hp:tc .*?</hp:tc>', trs[min(1, len(trs) - 1)], S)[0]
+    head = proto[:proto.index('<hp:tr>')]
+    tail = proto[proto.rindex('</hp:tr>') + len('</hp:tr>'):]
+    total = int(re.search(r'<hp:sz width="(\d+)"', head).group(1))
+    h = int(height_mm * 283.465)
+    thin = ('SOLID', f"{SK.load()['settings']['table']['inner_line_mm']:g} mm")
+    c = re.sub(r'<hp:t>.*?</hp:t>', '<hp:t></hp:t>', cell, flags=S)
+    c = re.sub(r'(<hp:tc [^>]*?borderFillIDRef=")(\d+)',
+               lambda m: m.group(1) + F.border(m.group(2), {'left': thin, 'right': thin, 'top': thin, 'bottom': thin}), c, count=1)
+    c = re.sub(r'<hp:cellAddr colAddr="\d+" rowAddr="\d+"/>', '<hp:cellAddr colAddr="0" rowAddr="0"/>', c)
+    c = re.sub(r'<hp:cellSpan colSpan="\d+" rowSpan="\d+"/>', '<hp:cellSpan colSpan="1" rowSpan="1"/>', c)
+    c = re.sub(r'<hp:cellSz width="\d+" height="\d+"', f'<hp:cellSz width="{total}" height="{h}"', c)
+    head = re.sub(r'rowCnt="\d+" colCnt="\d+"', 'rowCnt="1" colCnt="1"', head, count=1)
+    head = re.sub(r'(<hp:sz width="\d+" widthRelTo="\w+" height=")\d+', lambda m: m.group(1) + str(h), head, count=1)
+    return head + '<hp:tr>' + c + '</hp:tr>' + tail
+
+
 def _emit(b, roles, gaps, kind, F=None):
     """양식 블록 하나 → 문단들(앞 띄움 포함)."""
     k = b[0]
     gap = gaps.get(k, '')
+    if k == 'figure' and 'table' in roles:  # 쪽 빈 곳: 도면 넣을 자리
+        return [gaps.get('sq', ''), _fill(roles['cap'], [b[1]]), _figure(roles['table'], b[2], F)]
     if k == 'att' and 'sq' in roles:  # 붙임 N 제목: □ 문단 서식을 빌려 새 쪽에서 시작
         return [_page_break(_fill(roles['sq'], ['', f'{b[1]}  ', b[2]]), True)]
     if k == 'sq' and 'sq' in roles:
