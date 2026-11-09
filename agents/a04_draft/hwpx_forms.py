@@ -178,6 +178,48 @@ class Form:
         variant = col + ':' + ','.join(f'{s}={k}/{w}' for s, (k, w) in sorted(sides.items()))
         return self._clone('borderFill', 'borderFills', fill_id, lines, variant)
 
+    def font_id(self, lang, face):
+        m = re.search(rf'<hh:fontface lang="{lang}" fontCnt="\d+">(.*?)</hh:fontface>', self.header, S)
+        f = re.search(rf'<hh:font id="(\d+)" face="{re.escape(face)}"', m.group(1)) if m else None
+        return f.group(1) if f else None
+
+    def char(self, src_id, height=None, color=None, face=None, bold=None):
+        """글자 모양 복제: 크기(1300 = 13pt)·색·글꼴·굵게"""
+        def ed(x):
+            if height:
+                x = re.sub(r'(<hh:charPr [^>]*?height=")\d+', rf'\g<1>{height}', x, count=1)
+            if color:
+                x = re.sub(r'(<hh:charPr [^>]*?textColor=")#\w+', rf'\g<1>{color}', x, count=1)
+            if face:
+                for lang, attr in (('HANGUL', 'hangul'), ('LATIN', 'latin'), ('HANJA', 'hanja'), ('JAPANESE', 'japanese'),
+                                   ('OTHER', 'other'), ('SYMBOL', 'symbol'), ('USER', 'user')):
+                    fid = self.font_id(lang, face)
+                    if fid is not None:
+                        x = re.sub(rf'(<hh:fontRef [^>]*?\b{attr}=")\d+', rf'\g<1>{fid}', x, count=1)
+            if bold and '<hh:bold/>' not in x:
+                x = x.replace('<hh:underline', '<hh:bold/><hh:underline', 1)
+            if bold is False:
+                x = x.replace('<hh:bold/>', '')
+            return x
+        return self._clone('charPr', 'charProperties', src_id, ed, f'{height}/{color}/{face}/{bold}')
+
+    def boxfill(self, fill_id, sides, face=None):
+        """칸 테두리 + 바탕색(face=None이면 바탕 없음)"""
+        def ed(x):
+            for s_, (kind, width) in sides.items():
+                x = re.sub(rf'<hh:{s_}Border [^/]*/>', f'<hh:{s_}Border type="{kind}" width="{width}" color="#000000"/>', x)
+            x = re.sub(r'<hc:fillBrush>.*?</hc:fillBrush>', '', x, flags=S)
+            if face:
+                x = x.replace('</hh:borderFill>', f'<hc:fillBrush><hc:winBrush faceColor="{face}" hatchColor="#FF000000" '
+                                                  'alpha="0"/></hc:fillBrush></hh:borderFill>')
+            return x
+        return self._clone('borderFill', 'borderFills', fill_id, ed, f'box:{sorted(sides.items())}/{face}')
+
+    def align(self, para_id, how='LEFT'):
+        def ed(x):
+            return re.sub(r'(<hh:align [^>]*?horizontal=")\w+', rf'\g<1>{how}', x, count=1)
+        return self._clone('paraPr', 'paraProperties', para_id, ed, how)
+
     def small_right(self, para_id):
         """숫자 칸 문단: 오른쪽 정렬은 두고 오른쪽 여백만 작게(양식은 넓은 칸 기준 3,500 안팎)."""
         def small(x):
@@ -252,8 +294,16 @@ def _is_num(v):
 
 
 def _two_lines(s, font):
-    """제목줄 칸: 두 줄로 나눴을 때 긴 쪽 폭(가장 고르게 나눈 자리 기준)."""
-    return min(max(_glyphs(s[:k], font), _glyphs(s[k:], font)) for k in range(1, len(s) + 1)) if s else 0
+    """제목줄 칸: 두 줄로 나눴을 때 긴 쪽 폭. 낱말 중간에서는 나누지 않는다(띄어쓰기 자리만, 없으면 한 줄 폭)."""
+    if not s:
+        return 0
+    cuts = [k for k, ch in enumerate(s) if ch == ' ']
+    return min([_glyphs(s, font)] + [max(_glyphs(s[:k], font), _glyphs(s[k + 1:], font)) for k in cuts])
+
+
+def _word_need(v, font=None):
+    """칸에서 가장 긴 낱말 폭(어절 단위 줄바꿈이라 이보다 좁으면 낱말이 잘림)"""
+    return max((_glyphs(w, font) for w in re.split(r'\s+', v or '') if w), default=0)
 
 
 def _one_line_widths(data, n, total, pad, font):
@@ -303,6 +353,7 @@ def _col_widths(data, n, total, pad=PAD):
     def cell_need(v):
         return _glyphs(v) + pad + (RIGHT_GAP if re.fullmatch(r'[\d,.]+', v) else 0)
     need = [max(cell_need(r[j]) if j < len(r) else 0 for r in data) for j in range(n)]
+    floor_w = [max(_word_need(r[j]) if j < len(r) else 0 for r in data) + pad for j in range(n)]  # 가장 긴 낱말
     body = data[1:] or data
     # 고정 칸: 숫자·날짜·짧은 말만 있는 칸(줄바꿈 금지). 나머지는 긴 글자 칸(필요하면 두 줄)
     fixed = [all(re.fullmatch(r'[\d,.\-–]*', r[j] if j < len(r) else '') for r in body) or need[j] <= FONT * 5.5 * TIGHT + pad
@@ -312,6 +363,7 @@ def _col_widths(data, n, total, pad=PAD):
         flex = [j for j in range(n) if not fixed[j]]
         room = total - sum(need[j] for j in range(n) if fixed[j])
         floor = FONT * 3 * TIGHT + pad  # 긴 글자 칸도 한글 3자는 한 줄에
+        floor = max([floor] + [floor_w[j] for j in flex])  # 가장 긴 낱말은 한 줄에(낱말 중간 줄바꿈 방지)
         if flex and room >= floor * len(flex):
             want = sum(need[j] for j in flex)
             alloc = {j: room * need[j] / want for j in flex}
@@ -389,12 +441,19 @@ def _table(proto, cols, rows, F):
     text_para = re.search(r'paraPrIDRef="(\d+)"', cells[1][1]).group(1)   # 가운데 정렬(글자 칸)
     num_para = F.small_right(re.search(r'paraPrIDRef="(\d+)"', cells[1][-1]).group(1))  # 오른쪽 정렬(숫자 칸)
     out_rows, heights = [], []
+    num_col = [n > 2 and all(_is_num(r[j]) or r[j] in ('-', '–', '') for r in data[1:] if j < len(r)) for j in range(n)]
+    lines_est = 0
+    for row in data:
+        lines_est += max((max(1, -(-(_glyphs(row[j], font) + 2 * margin + SLACK) // max(1, widths[j]))) for j in range(min(n, len(row)))),
+                         default=1)
+    if lines_est * 5.2 + len(data) * 1.6 > 200:  # 한 쪽보다 긴 표: 글자처럼 취급을 끄고 쪽에서 나뉘게(빈 쪽 방지)
+        head = head.replace('treatAsChar="1"', 'treatAsChar="0"', 1)
     for ri, row in enumerate(data):
         src = cells[0] if ri == 0 else (cells[-1] if ri == len(data) - 1 else cells[1])
         tcs = []
         for j in range(n):
             v = row[j] if j < len(row) else ''
-            numeric = ri > 0 and bool(re.fullmatch(r'[\d,.]+', v))
+            numeric = ri > 0 and num_col[j] and bool(re.fullmatch(r'[\d,.]+', v))
             c = src[0] if j == 0 else (src[-1] if j == n - 1 else (src[2] if numeric and len(src) > 2 else src[1]))
             if ri > 0 and j > 0:
                 c = re.sub(r'(<hp:p [^>]*?)paraPrIDRef="\d+"', lambda m: m.group(1) + f'paraPrIDRef="{num_para if numeric else text_para}"',
@@ -464,12 +523,81 @@ def _figure(proto, height_mm, F):
     return head + '<hp:tr>' + c + '</hp:tr>' + tail
 
 
+def _body_para(seg, text, F, lead):
+    """본문 꼭지 문단: lead(' ㅇ ', '   - ') + (핵심어) 굵게 + 본문, 괄호 안은 작은 글자(스킬 body.paren_pt)"""
+    m = re.search(r'<hp:run charPrIDRef="(\d+)">\s*<hp:t>.*?</hp:t>\s*</hp:run>', seg, S)
+    if not m or F is None:
+        return _fill(seg, [lead + text])
+    cid = m.group(1)
+    small = F.char(cid, height=SK.hwp(SK.load()['settings']['body']['paren_pt']))
+    runs = [(cid, lead)]
+    key = re.match(r'(\((?![\d’\'])[^()]{1,14}\))\s*', text)
+    if key:
+        runs.append((F.char(cid, bold=True), key.group(1) + ' '))
+        text = text[key.end():]
+    for part in re.split(r'(\([^()]*\))', text):
+        if part:
+            runs.append((small if part.startswith('(') and part.endswith(')') else cid, part))
+    xml = ''.join(f'<hp:run charPrIDRef="{c}"><hp:t>{escape(t)}</hp:t></hp:run>' for c, t in runs)
+    return seg[:m.start()] + xml + seg[m.end():]
+
+
+ATT_FILL = '#364878'  # 붙임 번호 상자 바탕(담당자 수정본)
+
+
+def _att_heading(proto, num, label, F, ref_char):
+    """붙임 제목: [붙임 N](남색·흰 글자) | 간격 | [제목](흰 바탕) — 수정본 모양, HY헤드라인M 16pt, 선 0.3mm"""
+    trs = re.findall(r'<hp:tr>.*?</hp:tr>', proto, S)
+    cell = re.findall(r'<hp:tc .*?</hp:tc>', trs[min(1, len(trs) - 1)], S)[0]
+    head = proto[:proto.index('<hp:tr>')]
+    tail = proto[proto.rindex('</hp:tr>') + len('</hp:tr>'):]
+    total = int(re.search(r'<hp:sz width="(\d+)"', head).group(1))
+    widths = [5969, 592, total - 5969 - 592]
+    h = 2731
+    thick, none = ('SOLID', '0.3 mm'), ('NONE', '0.12 mm')
+    fill_src = re.search(r'borderFillIDRef="(\d+)"', cell).group(1)
+    para = re.search(r'paraPrIDRef="(\d+)"', cell).group(1)
+    face = 'HY헤드라인M'
+    specs = [(num, F.char(ref_char, height=1600, color='#FFFFFF', face=face, bold=False),
+              F.boxfill(fill_src, {'left': thick, 'right': thick, 'top': thick, 'bottom': thick}, ATT_FILL), para),
+             ('', ref_char, F.boxfill(fill_src, {'left': thick, 'right': thick, 'top': none, 'bottom': none}), para),
+             (' ' + label, F.char(ref_char, height=1600, color='#000000', face=face, bold=False),
+              F.boxfill(fill_src, {'left': thick, 'right': thick, 'top': thick, 'bottom': thick}, '#FFFFFF'), F.align(para, 'LEFT'))]
+    tcs = []
+    for j, (txt, ch, bf, pp) in enumerate(specs):
+        c = re.sub(r'<hp:p [^>]*>.*</hp:p>', f'<hp:p id="2147483648" paraPrIDRef="{pp}" styleIDRef="0" pageBreak="0" columnBreak="0" '
+                   f'merged="0"><hp:run charPrIDRef="{ch}"><hp:t>{escape(txt)}</hp:t></hp:run></hp:p>', cell, count=1, flags=S)
+        c = re.sub(r'(<hp:tc [^>]*?borderFillIDRef=")\d+', rf'\g<1>{bf}', c, count=1)
+        c = re.sub(r'(<hp:subList [^>]*?vertAlign=")\w+', r'\g<1>CENTER', c, count=1)
+        c = re.sub(r'<hp:cellAddr colAddr="\d+" rowAddr="\d+"/>', f'<hp:cellAddr colAddr="{j}" rowAddr="0"/>', c)
+        c = re.sub(r'<hp:cellSpan colSpan="\d+" rowSpan="\d+"/>', '<hp:cellSpan colSpan="1" rowSpan="1"/>', c)
+        c = re.sub(r'<hp:cellSz width="\d+" height="\d+"', f'<hp:cellSz width="{widths[j]}" height="{h}"', c)
+        c = re.sub(r'<hp:cellMargin left="\d+" right="\d+" top="\d+" bottom="\d+"/>',
+                   '<hp:cellMargin left="141" right="141" top="141" bottom="141"/>', c)
+        tcs.append(c)
+    head = re.sub(r'rowCnt="\d+" colCnt="\d+"', 'rowCnt="1" colCnt="3"', head, count=1)
+    head = re.sub(r'(<hp:sz width="\d+" widthRelTo="\w+" height=")\d+', lambda m: m.group(1) + str(h), head, count=1)
+    return _page_break(head + '<hp:tr>' + ''.join(tcs) + '</hp:tr>' + tail, True)
+
+
+def _balance(seg, title, limit=13):
+    """머리 제목이 길면 가운데에 가까운 띄어쓰기에서 두 줄로(예: 해오름지구 광역교통 / 현안사항 보고)"""
+    if len(title) <= limit or ' ' not in title:
+        return seg
+    spaces = [i for i, ch in enumerate(title) if ch == ' ']
+    k = min(spaces, key=lambda i: abs(i - len(title) / 2))
+    return seg.replace(escape(title), escape(title[:k]) + '<hp:lineBreak/>' + escape(title[k + 1:]), 1)
+
+
 def _emit(b, roles, gaps, kind, F=None):
     """양식 블록 하나 → 문단들(앞 띄움 포함)."""
     k = b[0]
     gap = gaps.get(k, '')
     if k == 'figure' and 'table' in roles:  # 쪽 빈 곳: 도면 넣을 자리
         return [gaps.get('sq', ''), _fill(roles['cap'], [b[1]]), _figure(roles['table'], b[2], F)]
+    if k == 'att' and 'table' in roles and F is not None:  # 붙임 N 제목 상자(새 쪽)
+        ref = re.search(r'charPrIDRef="(\d+)"', roles['sq']).group(1)
+        return [_att_heading(roles['table'], b[1], b[2], F, ref), gaps.get('sq', '')]
     if k == 'att' and 'sq' in roles:  # 붙임 N 제목: □ 문단 서식을 빌려 새 쪽에서 시작
         return [_page_break(_fill(roles['sq'], ['', f'{b[1]}  ', b[2]]), True)]
     if k == 'sq' and 'sq' in roles:
@@ -477,9 +605,13 @@ def _emit(b, roles, gaps, kind, F=None):
             return [gap, _fill(roles['sq'], ['□ ', '', b[2] or b[1] or '', '', '', ''])]
         return [gap, _fill(roles['sq'], ['□ ', f'({b[1]}) ' if b[1] and b[2] else (b[1] or ''), b[2] or ''])]
     if k == 'o' and 'o' in roles:
-        return [gap, _fill(roles['o'], [' ㅇ ', '', b[1]] if kind == 'press' else [f' ㅇ {b[1]}'])]
+        if kind == 'press':
+            return [gap, _fill(roles['o'], [' ㅇ ', '', b[1]])]
+        return [gap, _body_para(roles['o'], b[1], F, ' ㅇ ')]
     if k == 'dash':
         src = roles.get('dash') or roles.get('o')
+        if 'dash' in roles and kind != 'press':
+            return [gaps.get('dash', gap), _body_para(src, b[1], F, '   - ')]
         return [gaps.get('dash', gap), _fill(src, [f'   - {b[1]}', '', ''] if 'dash' not in roles else [f'   - {b[1]}'])]
     if k == 'note' and 'note' in roles:
         return [gap, _fill(roles['note'], [f'    * {b[1]}'] if kind != 'press' else [' ', f'  * {b[1]}', ''])]
@@ -559,7 +691,7 @@ def render(styled, form, form_path=None):
         i_sum = F.find(lambda t: t.startswith('◈'))
         roles, gaps = _body_roles(F, i_sum)
         h = next(b for b in styled if b[0] == 'head1p')
-        out.append(_fill(F.segs[0], [' ', h[1], '', '담', '당', '처장', '팀장', h[3], h[2]]))
+        out.append(_balance(_fill(F.segs[0], [' ', h[1], '', '담', '당', '처장', '팀장', h[3], h[2]]), h[1]))
         out += F.segs[1:i_sum]
         for b in styled:
             if b[0] == 'summary':

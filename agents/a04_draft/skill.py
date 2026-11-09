@@ -14,7 +14,7 @@ DEFAULTS = {
               'outer_line_mm': 0.25, 'inner_line_mm': 0.12, 'head_double_mm': 0.4, 'header_fill': 'E5E5E5'},
     'body': {'font_pt': 15, 'paren_pt': 13, 'note_pt': 13, 'line_spacing': 160,
              'before_sq_pt': 8, 'before_o_pt': 6, 'before_dash_pt': 4, 'before_note_pt': 3},
-    'writing': {'max_chars': 80, 'min_chars': 45, 'line_em': 31, 'max_em': 60, 'min_em': 48},
+    'writing': {'max_chars': 80, 'min_chars': 45, 'line_em': 30, 'max_em': 58, 'min_em': 47},
 }
 _cache = {}
 

@@ -157,6 +157,12 @@ def _past_only(line, report_date):
     return bool(ends) and all(e < now for e in ends)
 
 
+def _dates(text):
+    """날짜 표기만: ’27 상반기·2027년 하반기·’27 上 → ’27. 上/下"""
+    text = re.sub(r"(?:’|20)(\d\d)년?\s*(상|하)반기", lambda m: f"’{m.group(1)}. {'上' if m.group(2) == '상' else '下'}", text)
+    return re.sub(r"’(\d\d)\s*([上下])", r"’\1. \2", text)
+
+
 def _fix(text):
     """스킬 날짜 표기: ’27 상반기 → ’27. 上, 2027년 하반기 → ’27. 下"""
     text = re.sub(r"(?:’|20)(\d\d)년?\s*(상|하)반기", lambda m: f"’{m.group(1)}. {'上' if m.group(2) == '상' else '下'}", text)
@@ -248,7 +254,7 @@ def _refit(bodies, ok, conflict_vals, system, cfg, rep, data_text='', rounds=2):
             return
         rep['refit']['asked'] += len(jobs)
         prompt = ('아래 보고서 꼭지들의 길이를 고쳐라. 폭은 "칸"으로 센다: 한글 1칸, 띄어쓰기 0.5칸, 숫자·영문 0.55칸, 괄호 안 글자 0.87배. '
-                  '본문 한 줄은 31칸이다.\n'
+                  '본문 한 줄은 30칸이고 줄은 낱말 단위로 바뀌므로 두 줄 끝에 여유를 둔다.\n'
                   f'- ㅇ 본문(text)은 (핵심어) 포함 {w["min_em"]}~{w["max_em"]}칸: 두 줄을 넘지 않되 두 줄에 최대한 가깝게.\n'
                   f'- - 세부(subs)는 하나에 {int(dash_max)}칸 이내, 꼭지당 0~2개.\n'
                   '- "두 줄 넘침": 군더더기·중복을 빼거나 덜 중요한 내용을 덜어 낸다. subs는 새로 만들지 않는다(원래 있던 subs만 유지·합치기).\n'
@@ -285,6 +291,30 @@ def _refit(bodies, ok, conflict_vals, system, cfg, rep, data_text='', rounds=2):
             rep['refit']['fixed'] += 1
 
 
+def _attach(new, att, ok, conflict_vals, rep):
+    """AI가 간추린 붙임 표로 바꾼다(행마다 숫자 검사, 남은 행이 2개 미만이면 규칙 표 그대로)."""
+    def safe(cells):
+        line = ' '.join(cells)
+        return not bad_numbers(line, ok) and not any(n.replace(',', '') in conflict_vals and '확인 필요' not in line
+                                                       for n in NUM.findall(line))
+    plans = (('관계기관 쟁점', 'issues', '주요 쟁점별 관계기관 의견', ['쟁점', '관계기관', '의견', 'LH 의견(대응방안)'],
+              ('쟁점', '관계기관', '의견', 'LH의견'), 10),
+             ('추진 경위·일정', 'schedule', '추진 경위 및 향후 일정', ['시기', '추진 내용', '비고'], ('시기', '내용', '비고'), 12))
+    rep['attach'] = {}
+    for label, key, cap, cols, fields, mx in plans:
+        rows = [[_fix(str(r.get(f) or '')).strip() if f != '시기' else _dates(str(r.get(f) or '')).strip() for f in fields]
+                for r in (att.get(key) or []) if isinstance(r, dict)]
+        rows = [r for r in rows if any(r) and safe(r)][:mx]
+        i = next((k for k, b in enumerate(new) if b[0] == 'h' and b[1].startswith('붙임') and b[1].endswith(label)), None)
+        if i is None or len(rows) < 2:
+            continue
+        j = next((k for k in range(i + 1, len(new)) if new[k][0] == 'table'), None)
+        if j is None or any(new[k][0] == 'h' for k in range(i + 1, j)):
+            continue
+        new[j] = ('table', cap, cols, rows)
+        rep['attach'][label] = len(rows)
+
+
 def run(blocks, res3, events, cands, district, cfg=None, kinds=None, sections=BODY, path=SK.PATH):
     """반환: (새 블록 목록, 결과) — 결과 = {'written':[목차], 'kept_rule':[(목차, 이유)], 'dropped':[(줄, 이유)], 'seconds', 'error'}"""
     rep = {'written': [], 'kept_rule': [], 'dropped': [], 'seconds': 0, 'error': None, 'summary': None}
@@ -315,11 +345,17 @@ def run(blocks, res3, events, cands, district, cfg=None, kinds=None, sections=BO
         '4. 향후 계획: 날짜가 있는 일정을 (협의)·(일정) 등으로 묶어 ’26.6월, ’26. 下 표기로. 이미 지난 날짜(보고 날짜 이전)는 쓰지 않는다.\n'
         '5. 숫자는 자료에 있는 것만 그대로 쓴다. 더하기·빼기·추정 금지(사업 개수 세기만 허용). 문서마다 다른 값은 숫자 없이 "확인 필요".\n'
         '6. 개조식 명사형 끝맺음(~함·~임·~예정·~필요·~요청·~지속·~검토). 꼭지(ㅇ·-)는 두 줄을 넘지 않되 두 줄에 최대한 가깝게 채운다. '
-        '본문 한 줄은 한글 약 31자(띄어쓰기는 반 칸, 숫자·영문·괄호 안 작은 글자는 좁음)이므로 (핵심어) 포함 공백 포함 약 62~75자가 알맞다. '
+        '본문 한 줄은 한글 약 30자(띄어쓰기는 반 칸, 숫자·영문·괄호 안 작은 글자는 좁음)이므로 (핵심어) 포함 공백 포함 약 60~72자가 알맞다. '
         '넘치면 꼭지를 나누거나 "subs"(- 세부, 꼭지당 2개 이내)로 내리고, 짧으면 자료에 있는 사유·기관·조건을 보태 채운다. '
         '값이 바뀐 사실은 꼭 필요한 것만(사업비·개통·착공 등) 쓴다.\n'
         '7. ◈ 핵심요약: "(무엇) (현안 검토/추진 현황) 결과를 보고 드림" 또는 "~ 내용을 보고 드림" 한 문장, 숫자 없이.\n'
-        '출력 형식: {"summary": "...", "sections": [{"title": "추진 현황 및 문제점", "items": [{"key": "사업 현황", "text": "...", "subs": []}]}]}')
+        '8. 붙임 표(각 표가 A4 한 쪽 안에, 칸마다 짧게 — 13pt 표 한 줄에 들어가게): '
+        '"issues"는 관계기관 쟁점 표 행(자료의 관계기관 쟁점만): 쟁점 2~8자, 관계기관 2~6자, 의견 28자 이내, LH의견 24자 이내, '
+        '같은 쟁점의 둘째 행부터 쟁점·LH의견은 빈 문자열, 겹치는 의견은 합쳐 최대 10행. LH·사업시행자 입장은 관계기관 행으로 쓰지 말고 LH의견 칸에 쓴다. '
+        '"schedule"은 추진 경위·일정 표 행: 시기(’26.6월·’26. 下·’26.6월~’26.8월 표기), 내용 20자 이내, 비고 12자 이내(없으면 빈 문자열), '
+        '최근 실적 3~4건 + 보고 날짜 이후 일정, 같은 일은 한 번만, 날짜순 최대 12행.\n'
+        '출력 형식: {"summary": "...", "sections": [{"title": "추진 현황 및 문제점", "items": [{"key": "사업 현황", "text": "...", "subs": []}]}], '
+        '"attach": {"issues": [{"쟁점": "", "관계기관": "", "의견": "", "LH의견": ""}], "schedule": [{"시기": "", "내용": "", "비고": ""}]}}')
     t0 = time.time()
     try:
         c = dict(cfg or llm.load_config())
@@ -385,6 +421,7 @@ def run(blocks, res3, events, cands, district, cfg=None, kinds=None, sections=BO
         j = next((k for k in range(i + 1, len(new)) if new[k][0] == 'h'), len(new))
         new[i + 1:j] = out_b
         rep['written'].append(name)
+    _attach(new, out.get('attach') or {}, ok, conflict_vals, rep)  # 붙임 표: 한 쪽 안으로 간추린 표
     summ = str(out.get('summary') or '').strip().lstrip('◈ ').strip()
     if summ and not NUM.search(summ) and summ.endswith('보고 드림'):
         new = [('summary', summ) if b[0] == 'summary' else b for b in new]

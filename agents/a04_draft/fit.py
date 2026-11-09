@@ -10,7 +10,7 @@ import re
 
 from agents.a04_draft import skill as SK
 
-LINE_EM = {'o': 31.0, 'sq': 31.0, 'dash': 29.0, 'note': 30.0}
+LINE_EM = {'o': 30.0, 'sq': 30.0, 'dash': 28.0, 'note': 29.0}  # 11-09 한글 PDF로 다시 맞춤
 PAGE_MM = 250.0
 LINE_MM = 8.5          # 본문 한 줄(15pt, 줄간격 160%)
 ROW_MM = 7.6           # 표 한 줄(13pt)
@@ -19,7 +19,7 @@ GAP_MM = {'sq': 4.5, 'o': 2.2, 'dash': 1.4, 'note': 1.1}
 
 def writing():
     w = SK.load()['settings'].get('writing', {})
-    return {'line_em': w.get('line_em', 31), 'max_em': w.get('max_em', 60), 'min_em': w.get('min_em', 48)}
+    return {'line_em': w.get('line_em', 30), 'max_em': w.get('max_em', 58), 'min_em': w.get('min_em', 47)}
 
 
 def em(text, paren_scale=13 / 15):

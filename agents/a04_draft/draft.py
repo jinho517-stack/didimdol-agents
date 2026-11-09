@@ -141,6 +141,12 @@ def _ev_date(d):
     return f'’{m.group(1)}년 {m.group(2)}'.strip() if m else (d or '')
 
 
+def _tdate(v):
+    """표 안 날짜: 2030.12 → ’30.12 (담당자 수정본 표 표기)"""
+    m = re.fullmatch(r'20(\d\d)\.(\d{1,2})', str(v))
+    return f'’{m.group(1)}.{int(m.group(2))}' if m else v
+
+
 def _ev_key(d):
     m = re.match(r'(\d{4})(?:\.(\d{1,2}))?(?:\.(\d{1,2}))?\s*(상반기|하반기)?', d or '')
     if not m:
@@ -309,14 +315,24 @@ def build(facts, cands, sources, choices, title='', district='', dept='', sectio
                 lh = ' / '.join(x[1] for x in g['lh']) or '-'
                 for i, (who, say) in enumerate(g['org'] or [('-', '-')]):
                     rows.append([fac, issue if i == 0 else '', who, say, lh if i == 0 else ''])
+            rows = rows[:10]  # 한 쪽 안으로
             one = len({r[0] for r in rows}) <= 1
             body = [('table', '주요 쟁점별 관계기관 의견', ([] if one else ['사업']) + ['쟁점', '관계기관', '의견', 'LH 의견(대응방안)'],
                      [r[1:] if one else r for r in rows])] if rows else []
 
         elif sec == '붙임: 추진 경위·일정':
-            evs = sorted([e for e in events if e['kind'] in ('경위', '계획')], key=lambda e: _ev_key(e['date']))
+            # 한 쪽 안으로: 같은 내용은 한 번만, 지난 경위는 최근 4건, 앞으로 일정은 10건(담당자 원칙 7)
+            seen, evs = set(), []
+            for e in sorted([e for e in events if e['kind'] in ('경위', '계획')], key=lambda e: _ev_key(e['date'])):
+                k_ = re.sub(r'[\s()·,]|예정|완료|추진', '', e['content'])[:14]
+                if k_ not in seen:
+                    seen.add(k_)
+                    evs.append(e)
+            now = (today.year, today.month, today.day)
+            past = [e for e in evs if _ev_key(e['date']) < now][-4:]
+            evs = past + [e for e in evs if _ev_key(e['date']) >= now][:10]
             rows = [[_ev_date(e['date']), '실적' if e['kind'] == '경위' else '계획',
-                     '지구 공통' if e['facility'] == DISTRICT_FAC else e['facility'], e['content']] for e in evs][-24:]
+                     '지구 공통' if e['facility'] == DISTRICT_FAC else e['facility'], e['content']] for e in evs]
             body = [('table', '추진 경위 및 일정', ['시기', '구분', '사업', '내용'], rows)] if rows else []
 
         elif sec == '개요':
@@ -355,7 +371,7 @@ def build(facts, cands, sources, choices, title='', district='', dept='', sectio
                     m.setdefault(merge.get(f['item'], f['item']), f)
                 srcs = list(OrderedDict.fromkeys(f['source_doc'] for f in fs if f['source_doc']))
                 rows.append(([sym.get(fac, '-')] if sym else []) + [fac]
-                            + [('확인 필요' if m[i]['status'] == '미확정(충돌)' else year(m[i]['value']) or fmt_value(m[i]['value']))
+                            + [('확인 필요' if m[i]['status'] == '미확정(충돌)' else year(m[i]['value']) or _tdate(fmt_value(m[i]['value'])))
                                if i in m and m[i]['value'] is not None or i in m and m[i]['status'] == '미확정(충돌)' else '-'
                                for i in items] + ([', '.join(srcs)] if show_basis else []))
             costs = [float(f['value']) for f in facts if f['item'] == '사업비' and f['value'] is not None
@@ -373,7 +389,8 @@ def build(facts, cands, sources, choices, title='', district='', dept='', sectio
                          f"({len(costs)}개 사업 기준)" if costs and not total else '')),
                      ('table', '사업개요', cols, rows)]
             if sec == '붙임: 사업 개요':  # 붙임: 사업지구 개요 표 + 사업별 총괄표(문장 줄 없이)
-                info_rows = [[k, dist[i]['value'] if i not in ('총사업비',) else fmt_value(dist[i]['value'], '억원')]
+                info_rows = [[k, fmt_value(dist[i]['value'], '억원') if i == '총사업비' else
+                              (_ym(dist[i]['value']) if i in ('대책수립일', '대책시행시기', '최초입주') else dist[i]['value'])]
                              for k, i in (('사 업 명', '지구명칭'), ('사업시행자', '사업시행자'), ('개선대책 수립', '대책수립일'),
                                           ('시행시기', '대책시행시기'), ('최초 입주', '최초입주'), ('총사업비', '총사업비')) if i in dist]
                 body = ([('table', f"{dist['지구명칭']['value'] if '지구명칭' in dist else district} 사업개요", ['구 분', '내 용'], info_rows)]
