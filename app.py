@@ -862,8 +862,9 @@ def report_options(district, facts):
         company_form_box(form)
         extra = {}
         c1, c2 = st.columns(2)
-        use_polish = c1.toggle('AI 문장 다듬기(서식 규칙 적용)', value=HAS_LLM, disabled=not HAS_LLM, key='rp_polish',
-                               help='서식 규칙(담당자 원칙·문장 규칙)대로 AI가 문장을 고칩니다. 숫자·"확인 필요"가 바뀐 줄은 원래 문장을 씁니다.')
+        use_polish = c1.toggle('AI 본문 작성(담당자 수정본 문체)', value=HAS_LLM, disabled=not HAS_LLM, key='rp_ai_write',
+                               help='담당자가 고친 보고서를 예시로 AI가 본문(□ 3개)을 다시 씁니다. 숫자는 DB에 있는 값만 쓰고, '
+                                    '자료에 없는 숫자가 들어간 줄은 버립니다. 붙임 표는 DB 값 그대로입니다.')
         show_basis = c2.toggle('근거 표시(검토용)', value=False, key='rp_basis')
     return dict(preset=preset, dept=dept, pick_facs=pick_facs, chosen=chosen, extra=extra,
                 use_polish=use_polish, show_basis=show_basis)
@@ -888,8 +889,8 @@ def make_report(district, o):
                      o['title'], district, o['dept'], chosen, o['extra'], HAS_LLM, cfg, order=catalog.order(CAT, district),
                      kinds=KINDS, show_basis=o['show_basis'], events=evs, report_date=o.get('date'))
     pol = None
-    if o['use_polish']:
-        blocks, pol = A04.polish(blocks, cfg)
+    if o['use_polish']:  # AI 본문 작성(수정본 문체): 실패하거나 숫자가 어긋난 목차는 규칙 초안 그대로
+        blocks, pol = A04.compose(blocks, res3, evs, cands, district, cfg=cfg, kinds=KINDS, sections=chosen)
     st.session_state['report'] = {'blocks': blocks, 'a03': res3, 'sections': chosen, 'district': district, 'opts': o,
                                   'dept': o['dept'], 'checks': A04.check(blocks, res3, cands, chosen, evs),
                                   'polish': pol, 'stamp': datetime.now().strftime('%Y%m%d_%H%M%S')}
@@ -923,7 +924,7 @@ def report_setup(has_report):
             go = st.button('다시 만들기  →' if has_report else '초안 만들기  →', type='primary', width='stretch')
     if go:
         o.update(title=title, date=parse_kdate(dtxt))
-        with st.spinner('DB 값으로 초안을 쓰는 중…' + (' (AI가 서식 규칙대로 문장을 다듬는 중, 10~30초)' if o['use_polish'] else '')):
+        with st.spinner('DB 값으로 초안을 쓰는 중…' + (' (AI가 담당자 수정본 문체로 본문을 쓰는 중, 20~60초)' if o['use_polish'] else '')):
             make_report(district, o)
         st.rerun()
 
@@ -963,14 +964,17 @@ def page_report():
                         f"{esc(', '.join(items))}{' 등' if len(lack) > 4 else ''} — 문서끼리 값이 달라 보고서에 “확인 필요”로 "
                         '적었어요. 자료 DB › 적재 현황·관리에서 고르면 다시 만들 때 반영돼요.</span></div>', unsafe_allow_html=True)
         pol = rep.get('polish')
-        if pol and not pol['error'] and (pol['changed'] or pol['kept']):
-            with st.expander(f"AI가 서식 규칙대로 고친 문장 {len(pol['changed'])}줄"):
-                for old, new in pol['changed']:
-                    st.markdown(f"- 전: {esc(old)}  \n  **후: {esc(new)}**")
-                for old, why in pol['kept']:
-                    st.markdown(f"- {esc(old)}  \n  ↺ 원래 문장 유지({esc(why)})")
+        if pol and 'written' in pol and not pol['error']:
+            st.markdown(f'<div class="rv-ok">AI가 수정본 문체로 쓴 목차: {esc(", ".join(pol["written"]) or "없음")}</div>',
+                        unsafe_allow_html=True)
+            if pol['dropped'] or pol['kept_rule']:
+                with st.expander(f"숫자 검사로 뺀 줄 {len(pol['dropped'])}개 · 규칙 초안 그대로 {len(pol['kept_rule'])}개"):
+                    for line, why in pol['dropped']:
+                        st.markdown(f"- {esc(line)}  \n  ✕ {esc(why)}")
+                    for name, why in pol['kept_rule']:
+                        st.markdown(f"- □ {esc(name)}: 규칙 초안 사용({esc(why)})")
         elif pol and pol['error']:
-            st.caption(f"AI 문장 다듬기 실패 → 자동 작성 문장 그대로: {pol['error'][:120]}")
+            st.caption(f"AI 본문 작성 실패 → 규칙 초안 그대로: {pol['error'][:120]}")
 
     lay = A04.Layout(rep['blocks'], form, res3['facts'], district, rep['dept'], KINDS, form_path=form_path)
     safe = re.sub(r'[\\/:*?"<>|]', '_', lay.title)

@@ -19,6 +19,7 @@
 import re
 
 from agents.a04_draft import draft, hwpx_forms, lh_style
+from agents.a04_draft import compose as _compose
 from agents.a04_draft import polish as _polish
 from agents.a04_draft import skill
 
@@ -32,6 +33,11 @@ def run(a03, cands, sources, choices, title='', district='', dept='', sections=N
     """①~③ A03 자료표(a03['facts'])로 보고서 블록(제목·□·ㅇ·- …)을 만든다. 반환: 블록 목록"""
     return draft.build(a03['facts'], cands, sources, choices, title, district, dept, sections, extra,
                        use_llm, cfg, order=order, kinds=kinds, show_basis=show_basis, events=events, report_date=report_date)
+
+
+def compose(blocks, a03, events, cands, district, cfg=None, kinds=None, sections=None):
+    """③ AI 본문 작성: 담당자 수정본(skills/lh_report_style/examples)을 예시로 □ 본문을 다시 쓴다. 숫자 검사 통과한 줄만 씀."""
+    return _compose.run(blocks, a03, events, cands, district, cfg=cfg, kinds=kinds, sections=sections or _compose.BODY)
 
 
 def polish(blocks, cfg=None):

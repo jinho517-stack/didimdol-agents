@@ -404,6 +404,25 @@ def main():
     sty = A04.lh_style.restyle(b45, '1쪽 보고서')
     assert [b[1] for b in sty if b[0] == 'att'] == ['붙임 1', '붙임 2']  # 쟁점이 없으면 그 붙임은 빠짐
     assert A04.Layout(b45, '1쪽 보고서', r34['facts'], '누리마루지구', '', CAT['kinds']).hwpx()[:2] == b'PK'
+    # AI 본문 작성(수정본 문체): 가짜 AI로 숫자 안전장치 확인 — 자료에 없는 숫자 줄은 버리고, AI가 실패하면 규칙 초안 그대로
+    from agents.a04_draft import compose as CP
+    real = CP.llm.ask_json
+    CP.llm.ask_json = lambda *a, **k: {'summary': '누리마루 공공주택지구 광역교통 현안 검토 결과를 보고 드림', 'sections': [
+        {'title': '추진 현황 및 문제점', 'items': [
+            {'key': '사업 현황', 'text': '광역교통개선대책 5개 사업, 총사업비 9,010억원 규모로 추진 중이나 철도 순연 지속'},
+            {'key': '사업비', 'text': '사업비 9,999억원으로 증가 예상'}]},
+        {'title': '대응 방향', 'items': [{'key': '철도', 'text': '대안 비교·검토 후 관계기관 협의로 노선 확정 추진'}]}]}
+    try:
+        b46, rp = A04.compose(b45, r34, ev4, db.load_candidates(con4, '누리마루지구'), '누리마루지구', kinds=CAT['kinds'])
+        CP.llm.ask_json = lambda *a, **k: (_ for _ in ()).throw(RuntimeError('fake fail'))
+        b47, rp2 = A04.compose(b45, r34, ev4, db.load_candidates(con4, '누리마루지구'), '누리마루지구', kinds=CAT['kinds'])
+    finally:
+        CP.llm.ask_json = real
+    t6 = draft.to_text(b46)
+    assert '(사업 현황) 광역교통개선대책 5개 사업, 총사업비 9,010억원 규모로 추진 중이나 철도 순연 지속' in t6, t6
+    assert '9,999' not in t6 and len(rp['dropped']) == 1 and rp['written'] == ['추진 현황 및 문제점', '대응 방향'], rp
+    assert '□ 향후 계획' in t6 and '붙임 1 사업 개요' in t6 and '현안 검토 결과를 보고 드림' in t6
+    assert b47 == b45 and rp2['error']
     chk4 = A04.check(b44, r34, db.load_candidates(con4, '누리마루지구'), secs4, ev4)
     assert all(c['결과'] == '통과' for c in chk4 if c['점검'] != '미확정 표시'), chk4
     con4.close()
