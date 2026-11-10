@@ -15,6 +15,21 @@ PAGE_MM = 246.0        # 11-09 한글 PDF: 쪽 위 19mm ~ 아래 265mm
 LINE_MM = 8.5          # 본문 한 줄(15pt, 줄간격 160%)
 ROW_MM = 6.6           # 표 한 줄(13pt, 칸 여백 포함)
 GAP_MM = {'sq': 4.5, 'o': 2.2, 'dash': 1.4, 'note': 1.1}
+WRAP_MM = 6.0          # 표 칸 안에서 한 줄 더 늘 때(13pt, 11-10 한글 PDF 붙임 2 쟁점 표로 맞춤)
+TABLE_EM = 34.0        # 표 폭(13pt 글자 수)
+CELL_PAD_EM = 1.2      # 칸 좌우 여백(글자 수)
+
+
+def table_lines(cols, rows):
+    """표 줄마다 몇 줄로 그려질지 어림. 칸마다 줄바꿈되므로(11-10 빈 쪽 원인: 줄 전체 폭으로만 셈) 열 폭을 먼저 나눈다:
+    열마다 가장 긴 글의 폭을 재고, 합이 표 폭을 넘으면 그 비율로 줄여 열 폭을 정한 뒤 칸마다 줄 수를 센다."""
+    table = [list(map(str, cols))] + [list(map(str, r)) for r in rows]
+    n = max(len(r) for r in table)
+    need = [max((em(r[j]) * 0.87 + CELL_PAD_EM for r in table if j < len(r)), default=CELL_PAD_EM) for j in range(n)]
+    scale = min(1.0, TABLE_EM / sum(need)) if sum(need) else 1.0
+    width = [max(2.0, w * scale) for w in need]
+    return [max(1, max((math.ceil((em(c) * 0.87 + CELL_PAD_EM) / width[j] - 0.05) for j, c in enumerate(r) if c), default=1))
+            for r in table]
 
 
 def writing():
@@ -77,10 +92,7 @@ def block_mm(b):
     if k == 'table':
         cols, rows = b[2], b[3]
         unit = any(re.search(r'\((km|㎡|억원|m|원|%)\)', str(c)) for c in cols)
-        h = 13.0 + (5.0 if unit else 0) + ROW_MM * max(1, math.ceil(sum(em(str(c)) for c in cols) * 0.87 / 34 - 0.05))
-        for r in rows:  # 한 줄에 들어가는지: 줄 전체 글자 폭 ÷ 표 폭(13pt 약 34칸)
-            h += ROW_MM * max(1, math.ceil(sum(em(str(c)) for c in r) * 0.87 / 34 - 0.05))
-        return h + 2.0
+        return 13.0 + (5.0 if unit else 0) + sum(ROW_MM + (n - 1) * WRAP_MM for n in table_lines(cols, rows)) + 2.0
     if k == 'figure':
         return 17.0 + b[2]
     return 0.0
@@ -97,8 +109,8 @@ def add_figures(styled, name=''):
         if used > PAGE_MM:  # 여러 쪽에 걸친 부분은 높이 어림이 부정확해 빈 쪽이 생길 수 있으므로 넣지 않음
             return
         rest = PAGE_MM - used
-        if rest > 60:  # 도면 제목·간격 17mm + 여유 8mm를 빼고 남은 높이만큼 상자
-            out.append(('figure', caption, round(rest - 25, 1)))
+        if rest > 75:  # 도면 제목·간격 17mm + 여유 23mm를 빼고 남은 높이만큼 상자(넘치면 상자째 다음 쪽으로 밀려 빈 쪽이 생김)
+            out.append(('figure', caption, round(rest - 40, 1)))
 
     cap = f'< {name} 위치도 >' if name else '< 위치도 >'
     for b in styled:

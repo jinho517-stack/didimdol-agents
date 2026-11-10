@@ -342,8 +342,8 @@ def to_docx(blocks, form):
     def body_runs(p, text):
         """본문 꼭지: (핵심어)·**강조** 굵게, 괄호 안은 작은 글자(스킬 body.paren_pt), 나머지는 본문 글자."""
         lead = re.match(r'^[ㅇ\-]\s', text or '')
-        if lead:
-            font(p.add_run(lead.group()), BODY, BS)
+        if lead:  # 기호 뒤는 탭: 내어쓰기 위치로 바로 가서 둘째 줄과 첫 글자가 맞는다(빈칸은 양쪽 정렬 때 늘어남)
+            font(p.add_run(lead.group().rstrip() + '\t'), BODY, BS)
             text = text[lead.end():]
         for part, kind in body_parts(text):
             font(p.add_run(part), BODY, BT['paren_pt'] if kind == 'small' else BS, kind in ('key', 'bold'))
@@ -438,14 +438,14 @@ def to_docx(blocks, form):
             p = para(f'{b[1]}. {b[2]}', HEAD, 18, before=16)
             border(p, 'bottom', 12, '333333')
         elif k == 'sq':
-            p = para(before=BT['before_sq_pt'], left=5, hanging=5)
-            font(p.add_run('□ '), BODY, BS)
+            p = para(before=BT['before_sq_pt'], left=8.2, hanging=8.2)  # 한글 양식 내어쓰기 23.1pt와 같게(□ 15pt보다 넓어야 탭이 그 자리로 감)
+            font(p.add_run('□\t'), BODY, BS)  # 탭 = 내어쓰기 위치(둘째 줄 시작과 같은 곳)
             if b[1]:
                 font(p.add_run(f'({b[1]}) ' if b[2] else b[1]), BODY, BS, bold=True)
             if b[2]:
                 body_runs(p, b[2])
         elif k == 'o':
-            body_runs(para(before=BT['before_o_pt'], left=8.5, hanging=5), 'ㅇ ' + b[1])
+            body_runs(para(before=BT['before_o_pt'], left=8.5, hanging=5.5), 'ㅇ ' + b[1])
         elif k == 'dash':
             body_runs(para(before=BT['before_dash_pt'], left=14, hanging=4), '- ' + b[1])
         elif k == 'note':

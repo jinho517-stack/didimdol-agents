@@ -90,7 +90,7 @@ def _fill(seg, texts):
     it = iter(texts)
 
     def rep(m):
-        v = next(it, '')
+        v = (next(it, '') or '').replace('**', '')  # AI 강조 표시(**)가 글자로 남지 않게
         return f'<hp:t>{escape(v) if v else BLANK}</hp:t>'
     seg = re.sub(r'<hp:t>.*?</hp:t>', rep, seg, flags=S)
 
@@ -561,6 +561,31 @@ def _body_para(seg, text, F, lead):
     return seg[:m.start()] + xml + seg[m.end():]
 
 
+BODY_MARK = 'ZZDIDIMDOLBODYZZ'  # □ 문단에서 본문이 들어갈 글자 칸 표시(채운 뒤 굵게·작은 글자 조각으로 바꿈)
+
+
+def _sq_para(seg, key, text, F):
+    """□ 꼭지 문단: '□' + 고정폭 빈칸 + (핵심어) 굵게 + 본문(**강조** 굵게, 괄호 안 작은 글자).
+    □ 뒤를 보통 빈칸으로 두면 양쪽 정렬 때 그 빈칸이 늘어나 첫 줄 글자가 내어쓰기 위치(둘째 줄 시작)보다
+    오른쪽으로 밀린다(11-10 한글 PDF: 첫 줄 84~91pt, 둘째 줄 79.7pt). 고정폭 빈칸은 늘어나지 않는다."""
+    if not text:  # 핵심어만 있는 줄: 핵심어 칸에 통째로
+        seg = _fill(seg, ['□', key or '', ''])
+    else:
+        seg = _fill(seg, ['□', f'({key}) ' if key else '', BODY_MARK])
+    seg = seg.replace('<hp:t>□</hp:t>', '<hp:t>□<hp:fwSpace/></hp:t>', 1)
+    if not text:
+        return seg
+    m = re.search(rf'<hp:run charPrIDRef="(\d+)">\s*<hp:t>{BODY_MARK}</hp:t>\s*</hp:run>', seg, S)
+    if not m or F is None:
+        return seg.replace(BODY_MARK, escape(lh_style.plain(text)), 1)
+    cid = m.group(1)
+    small = F.char(cid, height=SK.hwp(SK.load()['settings']['body']['paren_pt']))
+    bold = F.char(cid, bold=True)
+    xml = ''.join(f'<hp:run charPrIDRef="{ {"small": small, "key": bold, "bold": bold}.get(k, cid)}"><hp:t>{escape(t)}</hp:t></hp:run>'
+                  for t, k in lh_style.body_parts(text))
+    return seg[:m.start()] + xml + seg[m.end():]
+
+
 ATT_FILL = '#364878'  # 붙임 번호 상자 바탕(담당자 수정본)
 
 
@@ -634,7 +659,7 @@ def _emit(b, roles, gaps, kind, F=None):
     if k == 'sq' and 'sq' in roles:
         if kind == 'press':
             return [gap, _fill(roles['sq'], ['□ ', '', b[2] or b[1] or '', '', '', ''])]
-        return [gap, _fill(roles['sq'], ['□ ', f'({b[1]}) ' if b[1] and b[2] else (b[1] or ''), b[2] or ''])]
+        return [gap, _sq_para(roles['sq'], b[1], b[2], F)]
     if k == 'o' and 'o' in roles:
         if kind == 'press':
             return [gap, _fill(roles['o'], [' ㅇ ', '', b[1]])]
@@ -649,8 +674,9 @@ def _emit(b, roles, gaps, kind, F=None):
     if k == 'table' and 'table' in roles:
         unit_pat = r'\((km|㎡|억원|m|원|천원|백만원|%)\)'  # 열 이름의 (단위)만 단위 줄로 옮긴다
         units = list(dict.fromkeys(u for c in b[2] for u in re.findall(unit_pat, c)))
+        # 단위가 없는 표는 단위 줄을 아예 넣지 않는다(빈 줄로 남아 표 제목과 표 사이가 벌어짐)
         return [gaps.get('sq', ''), _fill(roles['cap'], [f'< {b[1]} >']),
-                _fill(roles['unit'], [f'(단위 : {", ".join(units)})' if units else '']),
+                _fill(roles['unit'], [f'(단위 : {", ".join(units)})']) if units else '',
                 _table(roles['table'], [re.sub(unit_pat, '', c) for c in b[2]], b[3], F), gaps.get('table', '')]
     return []
 
