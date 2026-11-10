@@ -70,14 +70,22 @@ agent마다 무엇을 받아 무엇을 넘겼는지 출력하고, 결과 파일�
 
 Python 3.12가 필요합니다(requirements.txt의 고정 버전을 3.12에서 시험).
 
-```bash
-python -m venv .venv
-.venv\Scripts\activate            # macOS·Linux: source .venv/bin/activate
-pip install -r requirements.txt
-python selftest.py                # "모든 시험 통과"가 나오면 정상
-streamlit run app.py              # 브라우저에서 http://localhost:8501
+Windows PowerShell (가상환경을 켜는 `activate` 없이, 가상환경의 python을 직접 부릅니다):
+```powershell
+py -3.12 -m venv .venv
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+$env:PYTHONUTF8 = "1"; .venv\Scripts\python.exe selftest.py   # "모든 시험 통과"가 나오면 정상
+.venv\Scripts\python.exe -m streamlit run app.py              # 브라우저에서 http://localhost:8501
 ```
-- Windows에서 시험 결과가 글자 깨짐으로 멈추면 UTF-8 모드로 실행하세요: PowerShell에서 `$env:PYTHONUTF8 = "1"` 후 `python selftest.py`.
+macOS·Linux:
+```bash
+python3.12 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python selftest.py
+.venv/bin/python -m streamlit run app.py
+```
+- `.venv\Scriptsctivate`는 PowerShell의 스크립트 실행 제한 때문에 오류가 날 수 있어 쓰지 않습니다. 꼭 쓰려면 그 창에서만 `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`를 먼저 실행하세요.
+- `$env:PYTHONUTF8 = "1"`은 Windows에서 시험 결과가 글자 깨짐으로 멈추지 않게 하는 설정입니다.
 - `selftest.py`: 판정 규칙 기준 시험, 정답표 11개 항목, 충돌 선택, 비공식 메모, 문서 26개 읽기, 여러 지구 검색, **agent 4개 연결과 자동 점검(10번)**.
 
 ### 시연 순서 (키 없이)
@@ -93,8 +101,8 @@ streamlit run app.py              # 브라우저에서 http://localhost:8501
 ### 실제 추출(LLM) 사용
 키 값은 파일에 쓰지 않고 환경변수로만 넣습니다.
 ```powershell
-$env:ANTHROPIC_API_KEY = "<키>"
-streamlit run app.py
+$env:ANTHROPIC_API_KEY = "<키>"            # 조직 키면 $env:ANTHROPIC_WORKSPACE_ID = "<작업공간 ID>" 도
+.venv\Scripts\python.exe -m streamlit run app.py
 ```
 키가 있으면 A01이 AI로 값을 뽑고, A03이 질문·목적을 AI로 해석하며, A04에서 '종합 의견(AI)' 목차를 쓸 수 있습니다.
 
