@@ -571,10 +571,20 @@ def docs_manage(registered):
         A02.rejudge(con, CAT['default'])
         flash(f'{del_id}를 DB에서 뺐습니다. (원본 파일은 그대로입니다)')
         st.rerun()
-    if c2.button('DB 초기화'):
-        db.reset(con)
-        flash('DB를 비웠습니다. (원본 문서는 그대로입니다)')
+    if c2.button('DB 초기화', help='DB와 자료 적재 기록(문서 분류·담당자 결정)을 모두 비워 처음 상태로 되돌립니다. 원본 문서는 그대로입니다.'):
+        reset_all()
+        flash('DB와 자료 적재 기록을 비웠습니다. 자료 적재에서 처음부터 다시 올릴 수 있습니다. (원본 문서는 그대로입니다)')
         st.rerun()
+
+
+def reset_all():
+    """처음 상태로: DB + 적재 기록(intake_*.json) + 담당자 결정 예시 + 화면에 남은 적재 상태"""
+    db.reset(con)
+    for f in list(db.OUTPUT.glob('intake_*.json')):  # intake_examples.json(결정 예시)도 포함
+        f.unlink(missing_ok=True)
+    for k in ('ik', 'ik_focus', 'ik_sample_on', 'ik_no_values', 'ik_sel_fac', 'report'):
+        st.session_state.pop(k, None)
+    st.session_state['ik_tbl_ver'] = st.session_state.get('ik_tbl_ver', 0) + 1
 
 
 def sample_section():
@@ -1124,7 +1134,7 @@ def ik_build(district, files):
             s = dict(s)
             if s['status'] == '적재 완료' and not (d.get('path') and Path(d['path']).name in in_db):
                 s['status'] = '사람 결정' if s.get('how') == '담당자' else d['status']  # 기록만 남고 DB엔 없으면 다시 적재 가능하게
-            d.update({k: s[k] for k in ('facility', 'content', 'status', 'date') if s.get(k) is not None})
+            d.update({k: s[k] for k in ('facility', 'content', 'status', 'date', 'how') if s.get(k) is not None})
         elif d.get('path') and Path(d['path']).name in in_db and d['status'] == '자동 확정':
             d['status'] = '적재 완료'  # 이미 DB에 있는 문서
     # 문서마다 사업지구 확인: 다른 지구 문서로 보이면 확인 필요(그대로 적재되지 않게)
@@ -1442,9 +1452,10 @@ def page_intake():
             ik_load_db(district, state)
             st.rerun()
     show_flash()
-    if st.session_state.get('ik_no_values') and not db.facts(con):
-        st.warning('API 키가 없어 AI 대신 규칙으로 값을 뽑았는데, 이 문서들에서는 뽑힌 값이 없습니다. '
-                   '키 없이 보고서까지 보려면 모의 문서 26개의 추출 예시로 만든 샘플 DB를 불러오세요(지금 DB는 새로 만들어집니다).')
+    if any(d['status'] == '적재 완료' for d in docs) and not db.facts(con):
+        st.warning(('API 키가 없어 AI 대신 규칙으로 값을 뽑았는데, 이 문서들에서는 뽑힌 값이 없습니다. ' if not HAS_LLM else
+                    '적재한 문서에서 뽑힌 값이 없습니다. ')
+                   + '보고서까지 보려면 모의 문서 26개의 추출 예시로 만든 샘플 DB를 불러오세요(지금 DB는 새로 만들어집니다).')
         if st.button('🧪 샘플 DB 불러오기 (키 없이 시연)', key='ik_sample_db', type='primary'):
             st.session_state.pop('ik_no_values', None)
             load_sample_db()
