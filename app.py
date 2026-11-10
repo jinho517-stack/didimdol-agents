@@ -586,10 +586,18 @@ def sample_section():
     with st.expander(f'모의 문서 {len(docs)}개 보기'):
         doc_table(docs)
     if st.button('샘플 불러오기', type='primary'):
-        res = A02.run(con, [(d, [c for c in cands if c['doc_id'] == d['doc_id']]) for d in docs], CAT['default'], reset=True)
-        flash(f'A01 샘플 추출 결과 {len(cands)}건을 A02가 지구별로 판정했습니다. 담당자 선택이 필요한 충돌 {len(res["conflicts"])}건.')
-        st.session_state['goto'] = DOCS
-        st.rerun()
+        load_sample_db(extra, other)
+
+
+def load_sample_db(extra=True, other=True, goto=None):
+    """키 없이 시연: 모의 문서 26개의 A01 추출 결과 예시 → A02 판정(DB를 새로 만듦)"""
+    docs, cands = A01.load_sample(SAMPLE, extra, other, CAT['default'])
+    res = A02.run(con, [(d, [c for c in cands if c['doc_id'] == d['doc_id']]) for d in docs], CAT['default'], reset=True)
+    flash(f'A01 샘플 추출 결과 {len(cands)}건을 A02가 지구별로 판정했습니다. 담당자 선택이 필요한 충돌 {len(res["conflicts"])}건.')
+    st.session_state['goto'] = goto or DOCS
+    if goto is None:
+        st.session_state['db_view_next'] = DB_VIEWS[1]  # 적재 현황·관리(값 충돌 선택)로
+    st.rerun()
 
 
 NEW_DISTRICT = '＋ 새 사업지구 추가'
@@ -942,9 +950,12 @@ def page_report():
     if not db.facts(con):
         st.markdown('<div class="nw-hero"><h1>먼저 자료를 올려 주세요.</h1>'
                     '<p>자료 DB에서 자료를 올리고 적재하면, 그 값으로 보고서 초안을 만들어요.</p></div>', unsafe_allow_html=True)
-        if st.button('자료 DB로  →', type='primary'):
+        c1, c2 = st.columns([1, 2])
+        if c1.button('자료 DB로  →', type='primary'):
             st.session_state['goto'] = DOCS
             st.rerun()
+        if c2.button('🧪 샘플 DB 불러오고 바로 보고서 쓰기 (API 키 없이 시연)', key='rp_sample_db'):
+            load_sample_db(goto=REPORT)
         return
     rep = st.session_state.get('report')
     if rep:
@@ -1241,7 +1252,8 @@ def ik_table(docs, idx):
         return {'확인 필요': 'color:#b45309;font-weight:700', '자동 확정': 'color:#0f7a4a;font-weight:700',
                 '사람 결정': 'color:#0B3A8A;font-weight:700', '적재 완료': 'color:#5b6472'}.get(v, '')
     ev = st.dataframe(df.style.apply(color, axis=1).map(chip, subset=['상태']), hide_index=True, width='stretch',
-                      height=min(36 * len(df) + 40, 640), on_select='rerun', selection_mode='single-row', key='ik_tbl',
+                      height=min(36 * len(df) + 40, 640), on_select='rerun', selection_mode='single-row',
+                      key=f"ik_tbl_{st.session_state.get('ik_tbl_ver', 0)}",  # 결정 뒤 번호를 올려 표 선택을 새로 시작
                       column_config={'제목': st.column_config.TextColumn(width=260),
                                      '자료': st.column_config.TextColumn(width=62),
                                      '날짜': st.column_config.TextColumn(width=92),
@@ -1325,7 +1337,7 @@ def ik_detail(district, docs, i, facs):
         ik_save(district, docs)
         nxt = next((j for j, x in enumerate(docs) if x['status'] == '확인 필요'), None)
         st.session_state['ik_focus'] = nxt
-        st.session_state.pop('ik_tbl', None)
+        st.session_state['ik_tbl_ver'] = st.session_state.get('ik_tbl_ver', 0) + 1  # 표에 남은 행 선택을 비움(안 비우면 같은 문서가 계속 열림)
         st.rerun()
     st.caption('결정한 내용은 다음 분류 때 AI의 예시로 쓰입니다.' + ('' if date else ' 날짜를 넣어야 결정할 수 있습니다.'))
 
@@ -1352,6 +1364,8 @@ def ik_load_db(district, state):
         d['status'] = '적재 완료'
     ik_save(district, docs)
     flash(f'{len(ready)}건 적재 완료' + (f' · 파일 {len(with_file)}개에서 값 {n_vals}건을 DB에 더해 판정' if with_file else ''))
+    if with_file and not n_vals and not HAS_LLM:
+        st.session_state['ik_no_values'] = True  # 키 없이 규칙 추출로는 이 문서들에서 값을 못 뽑음 → 샘플 DB 안내
 
 
 def page_intake():
@@ -1391,7 +1405,7 @@ def page_intake():
     if files and state.get('sig') != sig:
         state = ik_build(district, files) | {'sig': sig}
         store[district] = state
-        st.session_state.pop('ik_tbl', None)
+        st.session_state['ik_tbl_ver'] = st.session_state.get('ik_tbl_ver', 0) + 1  # 표에 남은 행 선택을 비움(안 비우면 같은 문서가 계속 열림)
         st.session_state['ik_focus'] = next((j for j, x in enumerate(state['docs']) if x['status'] == '확인 필요'), None)
         st.rerun()
     docs = state['docs']
@@ -1428,6 +1442,12 @@ def page_intake():
             ik_load_db(district, state)
             st.rerun()
     show_flash()
+    if st.session_state.get('ik_no_values') and not db.facts(con):
+        st.warning('API 키가 없어 AI 대신 규칙으로 값을 뽑았는데, 이 문서들에서는 뽑힌 값이 없습니다. '
+                   '키 없이 보고서까지 보려면 모의 문서 26개의 추출 예시로 만든 샘플 DB를 불러오세요(지금 DB는 새로 만들어집니다).')
+        if st.button('🧪 샘플 DB 불러오기 (키 없이 시연)', key='ik_sample_db', type='primary'):
+            st.session_state.pop('ik_no_values', None)
+            load_sample_db()
     conflict_box(district)  # 적재 뒤 문서끼리 값이 다르면 여기서 고름(예전 대시보드 기능)
 
     left, mid, right = st.columns([0.95, 3.6, 1.35], gap='small')
@@ -1569,6 +1589,8 @@ def page_db():
     st.markdown('<div class="nw-hero"><h1>자료만 올리세요.<br>보고서는 알아서 쓸게요.</h1>'
                 '<p>올린 자료를 교통대책별로 나눠 DB에 쌓고, 양식에 맞춘 보고서 초안을 작성해서 보여 드려요.</p>'
                 '</div>', unsafe_allow_html=True)
+    if 'db_view_next' in st.session_state:  # 샘플 DB를 불러온 뒤 적재 현황·관리로(위젯 그리기 전에)
+        st.session_state['db_view'] = st.session_state.pop('db_view_next')
     if st.session_state.get('db_view') not in DB_VIEWS:
         st.session_state['db_view'] = DB_VIEWS[0]
     view = st.segmented_control('DB 보기', DB_VIEWS, key='db_view', label_visibility='collapsed') or DB_VIEWS[0]
