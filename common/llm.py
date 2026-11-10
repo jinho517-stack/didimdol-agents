@@ -1,14 +1,13 @@
 """LLM 호출은 전부 이 파일 한 곳에서 한다 (모델 교체 지점).
 config.yaml의 llm.provider(anthropic | openai_compatible), model, base_url, api_key_env만 읽는다.
-키 값은 파일에 쓰지 않고 환경변수로만 받는다. 표준 라이브러리 HTTP만 사용(별도 SDK 불필요)."""
+키 값은 파일에 쓰지 않고 환경변수로만 받는다. HTTP는 requests로 보낸다(별도 SDK 불필요)."""
 import json
 import os
 import time
 import re
-import urllib.error
-import urllib.request
 from pathlib import Path
 
+import requests
 import yaml
 
 CONFIG_PATH = Path(__file__).resolve().parents[1] / 'config.yaml'  # 프로젝트 맨 위의 config.yaml
@@ -44,22 +43,23 @@ RETRIES = 2  # 5초·10초 쉬고 다시 → 그래도 안 되면 오류 문구�
 
 
 def _post(url, headers, body, timeout=180):
-    data = json.dumps(body).encode('utf-8')
+    if not str(url).startswith(('https://', 'http://')):  # 설정 파일의 주소만 쓰고, http(s) 외 주소는 받지 않는다
+        raise RuntimeError(f'LLM 주소가 http(s)가 아닙니다: {url}')
     for attempt in range(RETRIES + 1):
-        req = urllib.request.Request(url, data=data, headers={'content-type': 'application/json', **headers}, method='POST')
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as r:
-                return json.loads(r.read().decode('utf-8'))
-        except urllib.error.HTTPError as e:
-            msg = e.read().decode('utf-8', 'replace')[:500]
-            if e.code in RETRY_CODES and attempt < RETRIES:
-                try:
-                    wait = float(e.headers.get('retry-after') or 0)
-                except ValueError:
-                    wait = 0
-                time.sleep(min(max(wait, 5 * 2 ** attempt), 60))  # 5·10·20·40초(최대 60초)
-                continue
-            raise RuntimeError(f'LLM 호출 실패 (HTTP {e.code}): {msg}') from e
+            r = requests.post(url, json=body, headers={'content-type': 'application/json', **headers}, timeout=timeout)
+        except requests.RequestException as e:
+            raise RuntimeError(f'LLM 호출 실패 (연결): {e}') from e
+        if r.ok:
+            return r.json()
+        if r.status_code in RETRY_CODES and attempt < RETRIES:
+            try:
+                wait = float(r.headers.get('retry-after') or 0)
+            except ValueError:
+                wait = 0
+            time.sleep(min(max(wait, 5 * 2 ** attempt), 60))  # 5·10·20·40초(최대 60초)
+            continue
+        raise RuntimeError(f'LLM 호출 실패 (HTTP {r.status_code}): {r.text[:500]}')
 
 
 def ask(prompt, system=None, json_mode=False, cfg=None) -> str:

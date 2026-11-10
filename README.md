@@ -68,7 +68,7 @@ agent마다 무엇을 받아 무엇을 넘겼는지 출력하고, 결과 파일�
 
 ## 실행 방법
 
-Python 3.10 이상이 필요합니다.
+Python 3.12가 필요합니다(requirements.txt의 고정 버전을 3.12에서 시험).
 
 ```bash
 python -m venv .venv

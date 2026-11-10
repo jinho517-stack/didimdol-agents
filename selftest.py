@@ -149,7 +149,7 @@ def main():
         assert must in clean, must
     assert draft.to_docx(blocks)[:2] == b'PK'
     hw = draft.to_hwpx(blocks)
-    import io, zipfile, xml.etree.ElementTree as ET
+    import io, zipfile, defusedxml.ElementTree as ET
     with zipfile.ZipFile(io.BytesIO(hw)) as z:
         assert z.namelist()[0] == 'mimetype' and z.getinfo('mimetype').compress_type == zipfile.ZIP_STORED
         ET.fromstring(z.read('Contents/section0.xml'))

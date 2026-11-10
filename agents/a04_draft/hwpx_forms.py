@@ -8,10 +8,14 @@ import zipfile
 from io import BytesIO
 from itertools import count
 from pathlib import Path
-from xml.sax.saxutils import escape
 
 from agents.a04_draft import lh_style
 from agents.a04_draft import skill as SK
+
+
+def escape(s):
+    """XML 글자 이스케이프(&, <, >) — xml 모듈 대신(보안 검사: 표준 xml 라이브러리 사용 금지)"""
+    return str(s).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
 DIR = Path(__file__).resolve().parents[2] / 'templates' / 'company'
 FILES = {  # 양식 이름 → 파일 이름 앞부분

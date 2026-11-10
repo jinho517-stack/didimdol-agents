@@ -1,7 +1,7 @@
 """A01: 문서 읽기 + LLM으로 항목 후보 추출. 원본 문서는 읽기만 한다(수정·이동·삭제 안 함)."""
 import csv
 import re
-import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as ET  # XXE·XML 폭탄 막는 안전한 파서
 import zipfile
 from pathlib import Path
 

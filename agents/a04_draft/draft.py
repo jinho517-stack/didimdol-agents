@@ -10,12 +10,16 @@ from collections import OrderedDict
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
-from xml.sax.saxutils import escape
 
 from agents.a02_resolve.resolver import INFORMAL, norm
 from agents.a02_resolve.resolver import key as rkey
 from common import llm
 from common.fmt import fmt_value, short_date  # noqa: F401  (draft.fmt_value로도 씀)
+
+
+def escape(s):
+    """XML 글자 이스케이프(&, <, >) — xml 모듈 대신(보안 검사: 표준 xml 라이브러리 사용 금지)"""
+    return str(s).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
 TEMPLATE = Path(__file__).resolve().parents[2] / 'templates' / 'report_template.hwpx'
 
