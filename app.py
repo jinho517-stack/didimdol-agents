@@ -531,6 +531,8 @@ def page_docs():
     else:
         st.info('아직 DB에 적재된 문서가 없습니다. 📥 자료 적재에서 자료를 올리세요.')
     show_flash()
+    with st.expander('🧪 API 키 없이 시연: 샘플 DB 불러오기 (모의 문서 추출 예시 → 판정)', expanded=not registered):
+        sample_section()
 
 
 def district_editor():
