@@ -6,7 +6,8 @@ def fmt_value(v, unit=''):
     if v is None:
         return '미확정'
     s = str(v)
-    if re.fullmatch(r'\d{4,}', s):
+    is_year = re.fullmatch(r'(19|20)\d\d', s) and (unit or '') in ('', '년')  # 2029 → 2,029 로 쓰지 않음
+    if re.fullmatch(r'\d{4,}', s) and not is_year:
         s = f'{int(s):,}'
     return f'{s}{unit or ""}'
 

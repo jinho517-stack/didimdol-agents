@@ -384,6 +384,133 @@ st.markdown("""<style>
 </style>""", unsafe_allow_html=True)
 
 
+# 팀원 화면 구성안 v0.1(디딤돌_화면구성_v0.1.html): 단계 막대·단계 카드·진행 표시·요약 숫자·다음 단계 카드·묶음 머리 표
+st.markdown("""<style>
+/* 상단 메뉴: 지금 보고 있는 메뉴 = 검정 */
+.st-key-top_nav button[data-variant][data-selected="true"]{background:var(--ink) !important;border-color:var(--ink) !important}
+.st-key-top_nav button[data-variant][data-selected="true"] p{color:#fff !important;font-weight:700 !important}
+.st-key-top_nav button[data-variant]{position:relative}
+/* 머리글 */
+.wz-hero h1{font-size:28px;font-weight:700;letter-spacing:-.03em;margin:10px 0 2px;padding:0;color:var(--ink)}
+.wz-hero p{font-size:15px;color:#5f5b54;margin:0}
+.st-key-db_view [role="radiogroup"]{justify-content:flex-end}
+/* 단계 막대(메뉴 겸 진행 표시) — 그림 위에 투명 버튼을 겹침 */
+.st-key-wz_nav{position:relative}
+.stepper{display:grid;grid-template-columns:repeat(3,1fr);background:var(--surface);border:1px solid var(--line);
+         border-radius:var(--r-lg);padding:18px 10px 16px}
+.stepper .step{position:relative;display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px;padding:0 8px}
+.stepper .step:not(:last-child)::after{content:'';position:absolute;top:22px;left:calc(50% + 28px);right:calc(-50% + 28px);height:3px;
+      background:var(--line);border-radius:2px}
+.stepper .step.done:not(:last-child)::after{background:var(--accent)}
+.stepper .num{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+      font-size:18px;font-weight:800;background:var(--sunken);color:var(--muted);border:3px solid transparent}
+.stepper .step.done .num{background:var(--accent);color:#fff}
+.stepper .step.cur .num{background:var(--surface);color:var(--accent);border-color:var(--accent);box-shadow:0 0 0 5px var(--accent-soft)}
+.stepper .t{font-size:16px;font-weight:700;color:var(--muted);margin-top:4px}
+.stepper .step.cur .t,.stepper .step.done .t{color:var(--ink)}
+.stepper .who{font-size:12px;border-radius:999px;padding:1px 9px;background:var(--sunken);color:var(--ink-2)}
+.stepper .who.ai{background:var(--accent-soft);color:var(--accent)}
+.stepper .who.me{background:var(--warn-bg);color:var(--warn)}
+.stepper .s{font-size:12.5px;color:var(--muted);line-height:1.4}
+.stepper .badge{font-size:12px;font-weight:700;color:var(--warn)}
+.st-key-wz_hit{position:absolute !important;inset:0;z-index:2}
+.st-key-wz_hit [data-testid="stHorizontalBlock"],.st-key-wz_hit [data-testid="stColumn"],
+.st-key-wz_hit [data-testid="stColumn"]>div,.st-key-wz_hit [class*="st-key-wz_s"],.st-key-wz_hit [data-testid="stButton"]{height:100% !important}
+.st-key-wz_hit button{height:100% !important;width:100%;opacity:0;cursor:pointer}
+.st-key-wz_hit button:disabled{cursor:default}
+/* 단계 카드 */
+.st-key-card_wz{padding:22px 24px !important}
+.ph{display:flex;gap:14px;align-items:flex-start;border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:6px}
+.ph .big{flex:none;width:40px;height:40px;border-radius:12px;background:var(--accent);color:#fff;font-weight:800;font-size:18px;
+         display:flex;align-items:center;justify-content:center}
+.ph h2{font-size:22px;font-weight:700;letter-spacing:-.02em;margin:0;padding:0;color:var(--ink)}
+.ph p{font-size:14.5px;color:var(--muted);margin:0}
+.foot-hint{font-size:13.5px;color:var(--muted);margin:0;text-align:center}
+.st-key-ik_up_hidden{display:none !important}
+[data-testid="stMain"] [data-testid="stBaseButton-primary"]:disabled{opacity:.4}
+.st-key-ik_sample_btn button p{color:var(--accent) !important;text-decoration:underline;font-size:14px}
+.files{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.files li{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:var(--r-sm);padding:8px 12px;font-size:14px;background:var(--surface)}
+.files .ext{flex:none;width:42px;height:26px;border-radius:6px;background:var(--sunken);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.files .k{margin-left:auto;color:var(--muted);font-size:13px}
+/* AI 진행 상황 */
+.ai-run{max-width:640px;margin:10px auto;padding:6px 0 4px}
+.ai-run .bar{height:8px;border-radius:4px;background:var(--sunken);overflow:hidden;margin:4px 0 18px}
+.ai-run .bar i{display:block;height:100%;background:var(--accent);transition:width .6s}
+.phase{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px dashed var(--line);font-size:15px;color:var(--muted)}
+.phase .ic{flex:none;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;background:var(--sunken)}
+.phase.done{color:var(--ink)}.phase.done .ic{background:var(--accent);color:#fff}
+.phase.run{color:var(--accent);font-weight:700}.phase.run .ic{background:var(--accent-soft);animation:wzpulse 1s infinite}
+@keyframes wzpulse{50%{box-shadow:0 0 0 6px var(--accent-soft)}}
+.caption{font-size:13px;color:var(--muted)}
+/* 2단계 */
+.strip{display:flex;flex-wrap:wrap;align-items:center;gap:10px;background:var(--bg);border:1px solid var(--line);border-radius:var(--r-sm);
+       padding:10px 14px;margin:8px 0 6px;font-size:14.5px}
+.strip .ok{background:var(--accent-soft);color:var(--accent);font-weight:700;border-radius:999px;padding:2px 10px}
+.strip .right{margin-left:auto}
+.s-warn{color:var(--warn);font-weight:700}.s-ok{color:#0f7a4a;font-weight:700}.s-blue{color:#0B3A8A;font-weight:700}
+.aibox{background:#e5f6ee;color:#0f7a4a;border-radius:8px;padding:10px 12px;font-size:14px;margin-bottom:12px;line-height:1.55}
+.aibox b{display:block}.aibox small{display:block;margin-top:6px;color:var(--ink)}
+.aibox.fixed{background:#eef3fa;color:#0B3A8A}
+.saved{background:#e5f6ee;color:#0f7a4a;border-radius:8px;padding:8px 12px;font-size:14px;margin-bottom:10px}
+.alldone{background:#e5f6ee;color:#0f7a4a;border-radius:var(--r-md);padding:30px;text-align:center;font-weight:500;margin:10px 0}
+.finish{background:var(--accent-soft);border-radius:var(--r-lg);padding:28px;text-align:center;margin:10px 0}
+.finish h3{font-size:22px;color:var(--accent);margin:0 0 6px;padding:0}
+/* 떠 있는 '이 DB로 보고서 쓰기' 버튼 */
+.st-key-fab{position:fixed !important;right:24px;bottom:24px;z-index:20;width:auto !important}
+.st-key-fab button{background:var(--ink) !important;border-radius:18px !important;padding:12px 20px !important;min-height:0 !important;
+      box-shadow:0 6px 20px rgba(0,0,0,.22)}
+.st-key-fab button p{color:#fff !important;font-weight:700;font-size:16px}
+.dd-vals .tbl th,.dd-vals .tbl td{white-space:normal !important;word-break:keep-all;padding-left:8px;padding-right:8px;min-width:0 !important}
+.dd-vals .tbl td:last-child{white-space:nowrap !important}
+[data-testid="stMainBlockContainer"]:has(.st-key-fab){padding-bottom:120px}  /* 맨 아래 버튼이 떠 있는 버튼에 가리지 않게 */
+/* 🗂 적재 현황·관리 */
+.st-key-mg_next{background:var(--ink);border-radius:var(--r-lg);padding:18px 22px;margin-bottom:4px}
+.nc{display:flex;gap:16px;align-items:center;color:#fff}.nc-ico{font-size:30px}
+.nc b{display:block;font-size:18px;color:#fff}.nc span{font-size:14px;color:#d6d3cc}.nc em{font-style:normal;color:#ffd38a}
+.st-key-mg_go_report button{background:#fff !important;border-color:#fff !important;min-height:52px}
+.st-key-mg_go_report button p{color:var(--ink) !important;font-weight:700}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:4px 0}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);padding:12px 16px}
+.kpi .v{font-size:26px;font-weight:800;line-height:1.2;color:var(--accent)}.kpi .l{font-size:13.5px;color:var(--muted)}
+.kpi.warn{background:var(--warn-bg);border-color:#f3d9a8}.kpi.warn .v{color:var(--warn)}
+.mh{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:6px}
+.mh h2{font-size:19px;font-weight:700;letter-spacing:-.02em;margin:0;padding:0;color:var(--ink)}
+.mh p{font-size:14px;color:var(--muted);margin:0}
+.st-key-card_mg_conf{border-color:#f0cf96 !important}
+.cf-name{font-size:15px;font-weight:700;border-top:1px solid var(--line);padding-top:12px;margin-top:4px}
+[class*="st-key-cfo_"] button{justify-content:flex-start;min-height:56px !important;border:1px solid var(--line-strong)}
+[class*="st-key-cfo_"] button p{font-size:20px !important;font-weight:800}
+[class*="st-key-cfo_"] button:hover{border-color:var(--accent) !important;box-shadow:0 0 0 3px var(--accent-soft)}
+.cf-src{font-size:12.5px;color:var(--muted);margin:-8px 0 0 4px}
+.common{font-size:14.5px;background:var(--bg);border-radius:8px;padding:8px 12px;margin:4px 0 12px}
+.tbl-wrap{overflow:auto;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+table.tbl{border-collapse:collapse;width:100%;font-size:14px;white-space:nowrap;margin:0}
+.tbl th{background:var(--sunken);font-weight:500;color:var(--ink-2);text-align:left;padding:7px 10px;border:0;border-bottom:1px solid var(--line-strong)}
+.tbl td{padding:7px 10px;border:0;border-bottom:1px solid var(--line)}
+.tbl td.wrap{white-space:normal;min-width:200px}
+.tbl.grouped th.gh{text-align:center;background:#e4e2dc;border-bottom:1px solid var(--line-strong)}
+.tbl.grouped th[rowspan]{vertical-align:middle}
+.tbl.grouped .gs{border-left:2px solid var(--line-strong)}
+.q{font-size:14px;font-weight:500;color:var(--ink-2);margin:16px 0 6px}
+.edit-h{border-top:1px solid var(--line);padding-top:14px}.edit-h span{font-size:13px;color:var(--muted);font-weight:400}
+.st-key-doc_detail{background:var(--bg);border:1px solid var(--line);border-radius:var(--r-md);padding:14px 16px}
+.dd-head b{display:block;font-size:16px;margin-top:2px}.dd-head small{display:block;color:var(--muted);font-size:12.5px}
+.dd-id{font-size:12px;font-weight:700;color:var(--accent);background:var(--accent-soft);border-radius:6px;padding:1px 7px}
+.dd-chips{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 10px}
+.dd-chips span{font-size:13px;border-radius:999px;padding:2px 10px;background:var(--surface);border:1px solid var(--line)}
+.dd-chips .ok{background:#e5f6ee;color:#0f7a4a;border-color:transparent}
+.dd-chips .warn{background:var(--warn-bg);color:var(--warn);border-color:transparent}
+.dd-chips .done{background:var(--sunken);color:var(--muted);border-color:transparent}
+.dd-vals{max-height:330px}
+.vst{font-size:12px;font-weight:700;border-radius:999px;padding:1px 8px;white-space:nowrap}
+.vst.ok{background:#e5f6ee;color:#0f7a4a}.vst.warn{background:var(--warn-bg);color:var(--warn)}.vst.done{background:var(--sunken);color:var(--muted)}
+.dd-evs{margin:0;padding-left:18px;font-size:13.5px}
+.empty{text-align:center;padding:30px 20px 10px}.empty b{display:block;font-size:18px;margin-bottom:6px}.empty p{color:var(--muted)}
+@media (max-width:860px){.kpis{grid-template-columns:1fr 1fr}.stepper .s{display:none}
+  .stepper .step:not(:last-child)::after{left:calc(50% + 26px);right:calc(-50% + 26px)}}
+</style>""", unsafe_allow_html=True)
+
 _cards = iter(range(10 ** 6))
 
 
@@ -681,6 +808,12 @@ def page_docs():
     """🗂 적재 현황·관리: DB 보기·고치기만(올리기는 자료 적재에서) — 값 충돌 → DB 적재 현황 → 사업 목록·유형 → 적재된 문서(수정·빼기)"""
     conflict_box(st.session_state.get('district') or CAT['default'])  # 방금 저장한 지구에 값 충돌이 있으면 먼저 보여 줌
     registered = db.sources(con)
+    if registered and not db.facts(con):  # 문서는 적재했는데 값이 하나도 없음(키 없이 규칙 추출) → 샘플 DB로 이어 가기
+        st.warning(('API 키가 없어 AI 대신 규칙으로 값을 뽑았는데, 적재한 문서에서 뽑힌 값이 없습니다. ' if not HAS_LLM else
+                    '적재한 문서에서 뽑힌 값이 없습니다. ')
+                   + '보고서까지 보려면 모의 문서 26개의 추출 예시로 만든 샘플 DB를 불러오세요(지금 DB는 새로 만들어집니다).')
+        if st.button('🧪 샘플 DB 불러오기 (키 없이 시연)', key='mg_sample_db', type='primary'):
+            load_sample_db()
     if registered:
         db_overview()
         district_editor()
@@ -739,9 +872,11 @@ def reset_all():
     db.reset(con)
     for f in list(db.OUTPUT.glob('intake_*.json')):  # intake_examples.json(결정 예시)도 포함
         f.unlink(missing_ok=True)
-    for k in ('ik', 'ik_focus', 'ik_sample_on', 'ik_no_values', 'ik_sel_fac', 'report'):
+    for k in ('ik', 'ik_focus', 'ik_sample_on', 'ik_no_values', 'ik_sel_fac', 'report', 'ik_step', 'ik_reached', 'ik_loading',
+              'ik_det', 'ik_auto_sig', 'ik_just_loaded'):
         st.session_state.pop(k, None)
     st.session_state['ik_tbl_ver'] = st.session_state.get('ik_tbl_ver', 0) + 1
+    st.session_state['ik_up_ver'] = st.session_state.get('ik_up_ver', 0) + 1  # 올리기 칸도 비움
 
 
 def sample_section():
@@ -1265,12 +1400,16 @@ def ik_docs_from(path, kind):
     return [{'kind': kind, 'title': title, 'date': date, 'sub': p.name, 'text': text, 'path': str(p)}]
 
 
-def ik_build(district, files):
-    """files: [(경로, 자료 종류)] → 분류된 문서 목록. 담당자가 이미 정한 것·DB에 실제로 들어간 것은 저장본을 따른다."""
+def ik_build(district, files, on_phase=None):
+    """files: [(경로, 자료 종류)] → 분류된 문서 목록. 담당자가 이미 정한 것·DB에 실제로 들어간 것은 저장본을 따른다.
+    on_phase(k): 화면 진행 표시(0 읽기 → 1 지구·대책 이름 → 2 분류). AI가 처음 내린 판단은 ai_* 로 따로 둔다(고친 칸 표시·되돌리기)."""
     global CAT
+    ph = on_phase or (lambda k: None)
+    ph(0)
     docs = []
     for path, kind in files:
         docs.extend(ik_docs_from(path, kind))
+    ph(1)
     basis = [d for d in docs if d['kind'] == K.KINDS[0]]  # 대책 보고서(기준정보 비교용, 표에도 함께 보임)
     added = catalog.merge_found(district, [d['text'] for d in docs if d.get('text')])  # 문서에 나온 사업을 목록에 보탬
     if added:
@@ -1278,8 +1417,21 @@ def ik_build(district, files):
         flash(f"문서에서 사업 {len(added)}개를 찾아 {district} 사업 목록에 더했습니다: {', '.join(added)} "
               "(적재 현황·관리 › 사업 목록·유형 고치기에서 수정 가능)")
     facs = ik_facilities(district)
-    with st.spinner('문서를 읽고 교통대책·내용을 분류하는 중…' + (' (AI가 확인 필요 문서를 추천하는 중)' if HAS_LLM else '')):
-        n_ai = K.classify(docs, facs, district, use_llm=HAS_LLM, cfg=cfg)
+    ph(2)
+    n_ai = K.classify(docs, facs, district, use_llm=HAS_LLM, cfg=cfg)
+    # 문서마다 사업지구 확인: 다른 지구 문서로 보이면 확인 필요(그대로 적재되지 않게)
+    for d in docs:
+        if not d.get('path'):
+            continue
+        r = catalog.detect_district(CAT, [Path(d['path']).name], [d.get('text') or ''])
+        other = (r['known'] or r['name']) if r else None
+        if other and other != district:
+            d['other_district'] = other
+            d['status'] = '확인 필요'
+            d['reason'] = (f"이 문서는 {other} 문서로 보입니다(근거: {r['evidence']}). "
+                           f"사업지구를 바꾸거나, {district} 문서가 맞으면 이대로 결정하세요. " + (d.get('reason') or '')).strip()
+    for d in docs:  # AI(규칙)가 처음 내린 판단
+        d.update(ai_fac=d['facility'], ai_content=d['content'], ai_date=d['date'], ai_status=d['status'])
     try:
         saved = {ik_key(s): s for s in json.loads(ik_register_path(district).read_text(encoding='utf-8'))}
     except Exception:
@@ -1294,18 +1446,6 @@ def ik_build(district, files):
             d.update({k: s[k] for k in ('facility', 'content', 'status', 'date', 'how') if s.get(k) is not None})
         elif d.get('path') and Path(d['path']).name in in_db and d['status'] == '자동 확정':
             d['status'] = '적재 완료'  # 이미 DB에 있는 문서
-    # 문서마다 사업지구 확인: 다른 지구 문서로 보이면 확인 필요(그대로 적재되지 않게)
-    for d in docs:
-        if not d.get('path'):
-            continue
-        r = catalog.detect_district(CAT, [Path(d['path']).name], [d.get('text') or ''])
-        other = (r['known'] or r['name']) if r else None
-        if other and other != district:
-            d['other_district'] = other
-            if d.get('status') != '적재 완료':
-                d['status'] = '확인 필요'
-                d['reason'] = (f"이 문서는 {other} 문서로 보입니다(근거: {r['evidence']}). "
-                               f"사업지구를 바꾸거나, {district} 문서가 맞으면 이대로 결정하세요. " + (d.get('reason') or '')).strip()
     return {'docs': docs, 'basis': basis, 'n_ai': n_ai}
 
 
@@ -1361,76 +1501,6 @@ def ik_facilities(district):
     return catalog.projects_of(CAT, district)
 
 
-def ik_stepper(cur):
-    return '<div class="ik-steps">' + ''.join(
-        f'<span class="{"on" if i == cur else ("past" if i < cur else "")}">{i + 1} {s}</span>' for i, s in enumerate(STEPS)) + '</div>'
-
-
-def ik_upload_cards(district, state):
-    """올리기 칸 하나. 자료 종류(대책 보고서·고시문·내부 보고)는 파일 이름·내용으로 알아서 정한다. 반환: [(경로, 종류)]"""
-    folder = UPLOADS / 'intake'  # 지구와 상관없이 한 곳(지구를 바꿔도 올린 파일이 남게)
-    files = []
-    with st.container(key='nw_drop'):
-        ups = st.file_uploader('파일을 업로드하세요', type=[e[1:] for e in extract.FORMATS], accept_multiple_files=True,
-                               key='ik_up_one', help='한글(hwpx)·워드·PDF·엑셀·텍스트, 여러 개를 한 번에 올릴 수 있습니다.')
-    for f in ups or []:
-        folder.mkdir(parents=True, exist_ok=True)
-        p = folder / f.name
-        if not p.exists() or p.stat().st_size != f.size:
-            p.write_bytes(f.getvalue())
-        kind = K.guess_kind(f.name)
-        files.append((str(p), kind if kind in INTAKE_KINDS else '내부 보고자료'))
-    return files
-
-
-def ik_fac_list(facs, docs, sel):
-    """왼쪽: 교통대책 목록(건수·진행 막대·최근 내용). 누르면 가운데 표를 그 대책으로 거른다."""
-    st.markdown(f'<div class="ik-lh">교통대책 {len(facs)}건 · 등록 기준</div>'
-                '<div class="ik-legend">막대: 설계 → 인허가 → 보상 → 공사<br>진한 칸 = 자료로 확인된 가장 뒤 단계</div>',
-                unsafe_allow_html=True)
-    rows = [('전체', len(docs), None)] + [(f, sum(d['facility'] == f for d in docs), f) for f in facs] + \
-        [(K.COMMON, sum(d['facility'] == K.COMMON for d in docs), K.COMMON)]
-    for i, (name, n, key) in enumerate(rows):
-        need = key is not None and any(d['facility'] == key and d['status'] == '확인 필요' for d in docs)
-        label = name if key in (None, K.COMMON) else f'{i:02d} {name}'
-        if st.button(f'{label} · {n}건', key=f'ik_fac_{i}', type='primary' if sel == key else 'tertiary', width='stretch',
-                     help=f'{name} 문서만 보기' if key else '모든 문서 보기'):
-            st.session_state['ik_sel_fac'] = key
-            st.rerun()
-        if key not in (None, K.COMMON):
-            cur, stage = K.stage_bar(docs, key)
-            segs = ''.join(f'<i class="{"cur" if j == cur else ("on" if j < cur else "")}" title="{s}"></i>'
-                           for j, s in enumerate(K.STAGE4))
-            st.markdown(f'<div class="ik-bar">{segs}<em>{stage}</em></div>'
-                        + ('<div class="ik-need">확인 필요 문서 있음</div>' if need else ''), unsafe_allow_html=True)
-
-
-def ik_table(docs, idx):
-    """가운데: 적재 문서 표(행을 고르면 오른쪽에 자세히). 반환: 고른 문서 번호 또는 None"""
-    df = pd.DataFrame([{'자료': K.KIND_SHORT[d['kind']], '날짜': (d['date'] or '') + ('' if d['date'] else ' ?'),
-                        '제목': d['title'], '교통대책': d['facility'],
-                        '내용': d['content'], '상태': d['status']} for d in (docs[i] for i in idx)])
-
-    def color(row):
-        bg = {'확인 필요': 'background-color:#fff4e0', '사람 결정': 'background-color:#eef3fa'}.get(row['상태'], '')
-        return [bg] * len(row)
-
-    def chip(v):
-        return {'확인 필요': 'color:#b45309;font-weight:700', '자동 확정': 'color:#0f7a4a;font-weight:700',
-                '사람 결정': 'color:#0B3A8A;font-weight:700', '적재 완료': 'color:#5b6472'}.get(v, '')
-    ev = st.dataframe(df.style.apply(color, axis=1).map(chip, subset=['상태']), hide_index=True, width='stretch',
-                      height=min(36 * len(df) + 40, 640), on_select='rerun', selection_mode='single-row',
-                      key=f"ik_tbl_{st.session_state.get('ik_tbl_ver', 0)}",  # 결정 뒤 번호를 올려 표 선택을 새로 시작
-                      column_config={'제목': st.column_config.TextColumn(width=260),
-                                     '자료': st.column_config.TextColumn(width=62),
-                                     '날짜': st.column_config.TextColumn(width=92),
-                                     '교통대책': st.column_config.TextColumn(width=150),
-                                     '내용': st.column_config.TextColumn(width=78),
-                                     '상태': st.column_config.TextColumn(width=72)})
-    rows = ev.selection.rows if ev and ev.selection else []
-    return idx[rows[0]] if rows else None
-
-
 def mark(html_text, d):
     """대책 이름에 형광 표시(이미 esc한 글에)."""
     for m in sorted(d.get('mentions') or [], key=len, reverse=True):
@@ -1464,53 +1534,11 @@ def show_original(d):
                                icon=':material/download:')
 
 
-def ik_detail(district, docs, i, facs):
-    """오른쪽: 고른 문서의 단서·AI 판단 + 사람 결정."""
-    d = docs[i]
-    st.markdown(f'<div class="ik-dh"><span>{d["kind"]}</span><b class="ik-st {ST_CLS[d["status"]]}">{d["status"]}</b></div>'
-                f'<div class="ik-dm">{esc(d.get("sub") or "")} · {d["date"] or "날짜 ?"}</div>'
-                f'<div class="ik-dt">{esc(d["title"])}</div>', unsafe_allow_html=True)
-    if d['status'] == '확인 필요':  # 무엇을 정해야 하는지 먼저
-        st.markdown(f'<div class="ik-why"><b>AI가 멈춘 이유</b>{esc(d["reason"])}'
-                    + (f'<small>💡 AI 추천: <b>{esc(d["facility"])} · {esc(d["content"])}</b><br>{esc(d["ai_why"])}</small>'
-                       if d.get('ai_why') else '') + '</div>', unsafe_allow_html=True)
-    lines = ''.join(f'<div class="ln"><span>{w}</span><p>{mark(esc(t), d)}</p></div>' for w, t in K.clues(d))
-    basis = ''.join(f'<li>{esc(x)}</li>' for x in K.why(d))
-    st.markdown(f'<div class="ik-clue"><small>원문에서 찾은 단서</small>{lines}'
-                f'<ul>{basis}</ul></div>', unsafe_allow_html=True)
-    if st.button('📄 원문 전체 보기', key=f'ik_view_{district}_{i}', width='stretch',
-                 help='문서 본문 전체(또는 문서관리대장의 해당 행)를 크게 띄우고, 원본 파일을 내려받을 수 있습니다.'):
-        show_original(d)
-    if d['status'] == '적재 완료':
-        st.caption('DB에 적재된 문서입니다.')
-        return
-    opts = list(dict.fromkeys(d.get('options') or [d['facility'], K.COMMON]))
-    tag = f'{district}_{i}'
-    pick = st.radio('① 어느 교통대책인가요?', opts, key=f'ik_r_{tag}',
-                    index=opts.index(d['facility']) if d['facility'] in opts else 0,
-                    format_func=lambda f: f if f == K.COMMON else f'{facs.index(f) + 1:02d} {f}' if f in facs else f)
-    other = st.selectbox('목록에 없으면', ['—'] + facs + [K.COMMON], key=f'ik_o_{tag}',
-                         format_func=lambda f: f'{len(facs)}개 대책 중 고르기…' if f == '—' else f)
-    content = st.selectbox('② 사업의 어떤 내용인가요?', K.CONTENTS, key=f'ik_c_{tag}',
-                           index=K.CONTENTS.index(d['content']) if d['content'] in K.CONTENTS else len(K.CONTENTS) - 1)
-    date = d['date']
-    if not date:
-        dv = st.date_input('③ 문서 날짜', value=None, key=f'ik_d_{tag}', format='YYYY-MM-DD')
-        date = dv.isoformat() if dv else ''
-    label = '결정하고 다음 확인 필요로' if d['status'] == '확인 필요' else '이대로 결정(고치기)'
-    if st.button(label, type='primary', width='stretch', key=f'ik_go_{tag}', disabled=not date):
-        d.update(facility=other if other != '—' else pick, content=content, date=date, status='사람 결정', how='담당자')
-        K.save_example(d, district)
-        ik_save(district, docs)
-        nxt = next((j for j, x in enumerate(docs) if x['status'] == '확인 필요'), None)
-        st.session_state['ik_focus'] = nxt
-        st.session_state['ik_tbl_ver'] = st.session_state.get('ik_tbl_ver', 0) + 1  # 표에 남은 행 선택을 비움(안 비우면 같은 문서가 계속 열림)
-        st.rerun()
-    st.caption('결정한 내용은 다음 분류 때 AI의 예시로 쓰입니다.' + ('' if date else ' 날짜를 넣어야 결정할 수 있습니다.'))
-
-
-def ik_load_db(district, state):
-    """④ 확인된 자료 DB 적재: 파일이 있는 문서는 A01 값 추출 → A02 판정, 대장 행은 적재 기록만."""
+def ik_load_db(district, state, on_phase=None):
+    """3단계 확인된 자료 DB 적재: 파일이 있는 문서는 A01 값 추출 → A02 판정, 대장 행은 적재 기록만.
+    on_phase(k): 화면 진행 표시(0 값 뽑기 → 1 최신값 판정 → 2 저장·정리)."""
+    ph = on_phase or (lambda k: None)
+    ph(0)
     docs = state['docs']
     ready = [d for d in docs if d['status'] in ('자동 확정', '사람 결정')]
     with_file = [d for d in ready if d.get('path')]
@@ -1523,150 +1551,388 @@ def ik_load_db(district, state):
             m['doc_id'] = db.doc_id_for_file(con, m['file']) or m['doc_id']
             m['district'] = district
             m['date'] = src.get('date') or m['date']
-        with st.spinner(f'{len(metas)}개 문서에서 값을 뽑아 DB에 적재하는 중…'):
-            res = A01.run(metas, catalog.items_for(CAT, district), use_llm=HAS_LLM, cfg=cfg)
-            A02.run(con, res, CAT['default'])
+        res = A01.run(metas, catalog.items_for(CAT, district), use_llm=HAS_LLM, cfg=cfg)
+        ph(1)
+        A02.run(con, res, CAT['default'])
         n_vals = sum(len(c) for _, c, _ in res)
+    ph(2)
+    n_fix = sum(wz_edited(d) for d in ready)
     for d in ready:
         d['status'] = '적재 완료'
     ik_save(district, docs)
-    flash(f'{len(ready)}건 적재 완료' + (f' · 파일 {len(with_file)}개에서 값 {n_vals}건을 DB에 더해 판정' if with_file else ''))
+    flash(f'✓ 문서 {len(ready)}건을 DB에 적재했습니다 · 값 {n_vals}건'
+          + (f' · 담당자가 고친 문서 {n_fix}건은 고친 값으로 들어갔습니다' if n_fix else ''))
     if with_file and not n_vals and not HAS_LLM:
         st.session_state['ik_no_values'] = True  # 키 없이 규칙 추출로는 이 문서들에서 값을 못 뽑음 → 샘플 DB 안내
 
 
-def page_intake():
-    district_names = list(dict.fromkeys((district_options() if db.facts(con) else []) + CAT['districts']))
-    if 'ik_district_next' in st.session_state:  # 문서로 찾은 지구·새로 등록한 지구로 바꿈(위젯 그리기 전에)
-        st.session_state['district'] = st.session_state.pop('ik_district_next')
-    if st.session_state.get('district') not in district_names:
-        st.session_state['district'] = CAT['default'] if CAT['default'] in district_names else district_names[0]
-    h1, h2 = st.columns([2, 3], vertical_alignment='bottom')
-    with h1.container(key='ik_head'):
-        district = st.selectbox('사업지구 · 문서를 올리면 자동으로 고릅니다', district_names, key='district')
-    facs = ik_facilities(district)
-    store = st.session_state.setdefault('ik', {})
-    state = store.get(district, {'docs': [], 'basis': [], 'n_ai': 0, 'sig': ''})
-    files = ik_upload_cards(district, state)
-    if st.session_state.get('ik_sample_on'):
+# ---------- 자료 적재 3단계 화면(팀원 화면 구성안 v0.1: 단계 막대가 곧 메뉴, 한 번에 한 단계만) ----------
+WZ_STEPS = [('자료 올리기', '담당자', '', '보고서·고시문·내부 보고 파일을 한꺼번에 올립니다'),
+            ('AI 분류 · 사람 확인', 'AI → 담당자', 'me', 'AI가 나누고, 애매하거나 틀린 것만 사람이 고칩니다'),
+            ('DB 적재', 'AI', 'ai', '버튼 한 번으로 DB에 쌓고, 적재 현황·관리에서 봅니다')]
+WZ_AI_PHASES = ['올린 문서 읽기', '사업지구 · 교통대책 이름 찾기', '문서마다 교통대책 · 내용 나누고, 확실한지 판단하기']
+WZ_LOAD_PHASES = ['확인된 문서에서 값 뽑기 (사업비 · 일정 · 현안)', '기존 DB 값과 비교해 최신 값 판정', 'DB에 저장하고 추진경위 정리']
+WZ_ORDER = {'확인 필요': 0, '사람 결정': 1, '자동 확정': 2, '적재 완료': 3}
+
+
+def wz_phases(labels, k, done_msg=''):
+    """AI가 일하는 동안 보여 주는 진행 표시(실제 처리 단계에 맞춰 한 칸씩)."""
+    pct = round(min(k, len(labels)) / len(labels) * 100)
+    rows = ''.join(f'<div class="phase {"done" if i < k else "run" if i == k else ""}">'
+                   f'<span class="ic">{"✓" if i < k else "⋯" if i == k else i + 1}</span>{esc(p)}</div>' for i, p in enumerate(labels))
+    return f'<div class="ai-run"><div class="bar"><i style="width:{pct}%"></i></div>{rows}{done_msg}</div>'
+
+
+def wz_head(i, desc):
+    t = WZ_STEPS[i][0]
+    st.markdown(f'<div class="ph"><span class="big">{i + 1}</span><div><h2>{t}</h2><p>{desc}</p></div></div>', unsafe_allow_html=True)
+
+
+def wz_go(i):
+    st.session_state['ik_step'] = i
+    st.session_state['ik_reached'] = max(st.session_state.get('ik_reached', 0), i)
+    st.rerun()
+
+
+def wz_stepper(cur, reached, loaded, need):
+    """맨 위 3단계 막대(메뉴 겸 진행 표시). 그림은 HTML, 누르기는 그 위에 겹친 투명 버튼."""
+    cells = []
+    for i, (t, who, cls, s) in enumerate(WZ_STEPS):
+        stt = 'done' if i < cur or (i == 2 and loaded) else 'cur' if i == cur else ''
+        badge = f'<span class="badge">확인할 문서 {need}건</span>' if i == 1 and need else ''
+        cells.append(f'<div class="step {stt}"><span class="num">{"✓" if stt == "done" else i + 1}</span><span class="t">{t}</span>'
+                     f'<span class="who {cls}">{who}</span><span class="s">{s}</span>{badge}</div>')
+    with st.container(key='wz_nav'):
+        st.markdown('<div class="stepper">' + ''.join(cells) + '</div>', unsafe_allow_html=True)
+        with st.container(key='wz_hit'):
+            cols = st.columns(3, gap=None)
+            for i in range(3):
+                if cols[i].button(f'{i + 1}단계로', key=f'wz_s{i}', disabled=i > reached or i == cur, width='stretch'):
+                    wz_go(i)
+
+
+def wz_foot(i, next_label=None, next_ok=False, hint='', key='wz_next'):
+    """맨 아래: [← 이전 단계] 안내 [다음 →]. 반환: 다음 버튼을 눌렀는지"""
+    c1, c2, c3 = st.columns([1, 2.2, 1.3], vertical_alignment='center')
+    if i > 0 and c1.button('← 이전 단계', key=f'wz_prev{i}'):
+        wz_go(i - 1)
+    c2.markdown(f'<p class="foot-hint">{hint}</p>', unsafe_allow_html=True)
+    return bool(next_label) and c3.button(next_label, type='primary', key=key, disabled=not next_ok, width='stretch')
+
+
+def wz_uploader(step):
+    """올리기 칸은 1단계에서만 보이고, 다른 단계에서는 숨겨 둔다(올린 파일이 사라지지 않게). 반환: [(경로, 종류)]"""
+    folder = UPLOADS / 'intake'  # 지구와 상관없이 한 곳(지구를 바꿔도 올린 파일이 남게)
+    ver = st.session_state.get('ik_up_ver', 0)
+    with st.container(key='nw_drop' if step == 0 else 'ik_up_hidden'):
+        ups = st.file_uploader('파일을 여기에 끌어 놓으세요', type=[e[1:] for e in extract.FORMATS], accept_multiple_files=True,
+                               key=f'ik_upload_{ver}', help='한글(hwpx)·워드·PDF·엑셀·텍스트, 여러 개를 한 번에 올릴 수 있습니다.')
+    files = []
+    for f in ups or []:
+        folder.mkdir(parents=True, exist_ok=True)
+        p = folder / f.name
+        if not p.exists() or p.stat().st_size != f.size:
+            p.write_bytes(f.getvalue())
+        kind = K.guess_kind(f.name)
+        files.append((str(p), kind if kind in INTAKE_KINDS else '내부 보고자료'))
+    if st.session_state.get('ik_sample_on') and INTAKE_SAMPLE.exists():
         files += [(str(p), k) for p in sorted(INTAKE_SAMPLE.iterdir()) if (k := K.guess_kind(p.name)) in INTAKE_KINDS]
-    mismatch = None
-    if files:  # ① 올린 문서로 사업지구를 찾는다
-        det, fsig = ik_detect(files)
-        if det and det['known'] and det['known'] != district and st.session_state.get('ik_auto_sig') != fsig:
-            st.session_state['ik_auto_sig'] = fsig  # 같은 파일로는 한 번만 자동 전환(그 뒤 사람이 바꾸면 그대로)
-            st.session_state['ik_district_next'] = det['known']
-            flash(f"올린 문서를 보고 사업지구를 **{det['known']}**(으)로 골랐습니다. (근거: {det['evidence']})")
-            st.rerun()
-        if det and not det['known']:
-            show_flash()
-            ik_register_box(det)
-            return
-        if det:
-            mismatch = det['known'] if det['known'] != district else None
-            st.markdown(f"<div class='ik-det{' bad' if mismatch else ''}'>🔎 문서로 찾은 사업지구: <b>{esc(det['known'])}</b>"
-                        + (f" — 지금 고른 지구({esc(district)})와 다릅니다. 이대로는 DB에 적재하지 않습니다." if mismatch else ' ✓')
-                        + (f"<small>근거: {esc(det['evidence'])}" + (f" · 다른 지구 문서도 섞여 있음: {esc(', '.join(det['others']))}" if det['others'] else '')
-                           + '</small>') + '</div>', unsafe_allow_html=True)
-    sig = district + '|' + '|'.join(sorted(f'{p}:{k}:{Path(p).stat().st_size}' for p, k in files))
-    if files and state.get('sig') != sig:
-        state = ik_build(district, files) | {'sig': sig}
-        store[district] = state
-        st.session_state['ik_tbl_ver'] = st.session_state.get('ik_tbl_ver', 0) + 1  # 표에 남은 행 선택을 비움(안 비우면 같은 문서가 계속 열림)
-        st.session_state['ik_focus'] = next((j for j, x in enumerate(state['docs']) if x['status'] == '확인 필요'), None)
-        st.rerun()
-    docs = state['docs']
-    cnt = {s: sum(d['status'] == s for d in docs) for s in K.STATUS}
-    cur = 0 if not docs else (2 if cnt['확인 필요'] else (3 if cnt['적재 완료'] < len(docs) else 3))
-    h2.markdown(ik_stepper(cur), unsafe_allow_html=True)
-    if not docs:
-        with card():
-            st.markdown('<div class="ik-empty">파일을 올리면 사업지구를 알아서 고르고, 문서마다 <b>어느 교통대책</b>의 '
-                        '<b>어떤 내용</b>인지 나눕니다. 처음 보는 사업지구면 그 자리에서 등록합니다.</div>',
-                        unsafe_allow_html=True)
-            if INTAKE_SAMPLE.exists():  # 모의 자료는 누리마루지구 문서(올리면 지구가 자동으로 바뀜)
-                n_s = sum(K.guess_kind(p.name) in INTAKE_KINDS for p in INTAKE_SAMPLE.iterdir())
-                if st.button(f'📁 모의 자료로 해 보기 (누리마루지구 · 문서 {n_s}건)'):
-                    st.session_state['ik_sample_on'] = True
-                    st.rerun()
-        show_flash()
-        conflict_box(district)
-        return
+    return files
 
-    ready = cnt['자동 확정'] + cnt['사람 결정']
-    with card():
-        c1, c2 = st.columns([4, 1], vertical_alignment='center')
-        basis = f"대책 보고서 {len(state['basis'])}건" if state['basis'] else '대책 보고서 없음(등록된 대책 기준)'
-        c1.markdown(f'<div class="ik-stat"><span>대책 기준정보 <em>{basis}</em></span><i></i>'
-                    f'<span>적재 문서 {len(docs)}건</span><span>자동 확정 <b class="ok">{cnt["자동 확정"]}</b></span>'
-                    f'<span>확인 필요 <b class="warn">{cnt["확인 필요"]}</b></span><span>사람 결정 <b class="blue">{cnt["사람 결정"]}</b></span>'
-                    f'<span>적재 완료 <b>{cnt["적재 완료"]}</b></span>'
-                    + (f'<span class="ai">AI 추천 {state["n_ai"]}건</span>' if state.get('n_ai') else '') + '</div>',
+
+def wz_chg(ai, now):
+    """고친 칸: 'AI 값 → 고친 값'"""
+    return f'{ai or "?"} → {now or "?"}' if (ai or '') != (now or '') else (now or '?')
+
+
+def wz_edited(d):
+    return (d.get('ai_fac'), d.get('ai_content'), d.get('ai_date') or '') != (d['facility'], d['content'], d['date'] or '') \
+        if 'ai_fac' in d else False
+
+
+def wz_sorted(docs, idx):
+    """2단계 표 순서: 확인 필요 → 사람 결정 → 자동 확정, 같은 상태는 날짜순"""
+    return sorted(idx, key=lambda j: (WZ_ORDER.get(docs[j]['status'], 9), docs[j]['date'] or '', j))
+
+
+def wz_next_need(docs):
+    return next((j for j in wz_sorted(docs, range(len(docs))) if docs[j]['status'] == '확인 필요'), None)
+
+
+def wz_table(docs, idx, sel):
+    """2단계 문서 표(확인 필요 → 사람 결정 → 자동 확정). 행을 고르면 오른쪽에서 확인·수정. 반환: 고른 문서 번호 또는 None"""
+    df = pd.DataFrame([{'상태': d['status'] + (' ✎' if wz_edited(d) else ''), '제목': d['title'],
+                        '교통대책': wz_chg(d.get('ai_fac'), d['facility']), '내용': wz_chg(d.get('ai_content'), d['content']),
+                        '날짜': wz_chg(d.get('ai_date'), d['date'])} for d in (docs[i] for i in idx)])
+
+    def color(row):
+        st_ = row['상태'].replace(' ✎', '')
+        bg = {'확인 필요': 'background-color:#fff4e0', '사람 결정': 'background-color:#eef3fa'}.get(st_, '')
+        return [bg] * len(row)
+
+    def chip(v):
+        v = v.replace(' ✎', '')
+        return {'확인 필요': 'color:#b45309;font-weight:700', '자동 확정': 'color:#0f7a4a;font-weight:700',
+                '사람 결정': 'color:#0B3A8A;font-weight:700', '적재 완료': 'color:#5b6472'}.get(v, '')
+    ev = st.dataframe(df.style.apply(color, axis=1).map(chip, subset=['상태']), hide_index=True, width='stretch',
+                      height=min(36 * len(df) + 40, 560), on_select='rerun', selection_mode='single-row',
+                      key=f"ik_tbl_{st.session_state.get('ik_tbl_ver', 0)}",  # 결정 뒤 번호를 올려 표 선택을 새로 시작
+                      column_config={'상태': st.column_config.TextColumn(width=80),
+                                     '제목': st.column_config.TextColumn(width=200),
+                                     '교통대책': st.column_config.TextColumn(width=150),
+                                     '내용': st.column_config.TextColumn(width=70),
+                                     '날짜': st.column_config.TextColumn(width=100)})
+    rows = ev.selection.rows if ev and ev.selection else []
+    return idx[rows[0]] if rows else None
+
+
+def wz_detail(district, docs, i, facs):
+    """오른쪽: 고른 문서의 AI 판단 + 고치는 칸. 확인 필요는 결정, 자동 확정·사람 결정도 틀리면 고쳐 저장."""
+    d = docs[i]
+    edited = wz_edited(d)
+    if msg := st.session_state.pop('ik_saved_msg', None):
+        st.markdown(f'<div class="saved">{esc(msg)}</div>', unsafe_allow_html=True)
+    if d['status'] == '확인 필요':
+        st.markdown(f'<div class="ik-why"><b>AI가 멈춘 이유</b>{esc(d.get("reason") or "")}'
+                    + (f'<small>💡 AI 추천: <b>{esc(d.get("ai_fac") or d["facility"])} · {esc(d.get("ai_content") or d["content"])}</b>'
+                       f' — {esc(d["ai_why"])}</small>' if d.get('ai_why') else '') + '</div>', unsafe_allow_html=True)
+    else:
+        title = '✎ 담당자가 고친 문서' if edited else ('✓ 담당자가 확인한 문서' if d['status'] == '사람 결정' else '🤖 AI가 자동 확정한 문서')
+        st.markdown(f'<div class="aibox{" fixed" if edited else ""}"><b>{title}</b>'
+                    f'AI 판단: {esc(d.get("ai_fac") or "")} · {esc(d.get("ai_content") or "")} · {esc(d.get("ai_date") or "날짜 ?")}'
+                    + (f'<br>→ 고친 값: {esc(d["facility"])} · {esc(d["content"])} · {esc(d["date"] or "날짜 ?")}' if edited else '')
+                    + '<small>틀렸다면 아래 칸을 고쳐 저장하세요. 고친 내용은 다음 분류 때 AI의 예시로 쓰입니다.</small></div>',
                     unsafe_allow_html=True)
-        if c2.button(f'확인된 자료 DB 적재 ({ready}건)', type='primary', width='stretch', disabled=not ready or bool(mismatch),
-                     help='자동 확정·사람 결정 문서를 DB에 적재합니다. 확인 필요 문서는 남겨 둡니다.'
-                          + (f' — 문서는 {mismatch} 것으로 보여 잠겨 있습니다. 사업지구를 맞추세요.' if mismatch else '')):
-            ik_load_db(district, state)
-            st.rerun()
-    show_flash()
-    if any(d['status'] == '적재 완료' for d in docs) and not db.facts(con):
-        st.warning(('API 키가 없어 AI 대신 규칙으로 값을 뽑았는데, 이 문서들에서는 뽑힌 값이 없습니다. ' if not HAS_LLM else
-                    '적재한 문서에서 뽑힌 값이 없습니다. ')
-                   + '보고서까지 보려면 모의 문서 26개의 추출 예시로 만든 샘플 DB를 불러오세요(지금 DB는 새로 만들어집니다).')
-        if st.button('🧪 샘플 DB 불러오기 (키 없이 시연)', key='ik_sample_db', type='primary'):
-            st.session_state.pop('ik_no_values', None)
-            load_sample_db()
-    conflict_box(district)  # 적재 뒤 문서끼리 값이 다르면 여기서 고름(예전 대시보드 기능)
+    st.markdown(f'<div class="ik-dm">{esc(d["kind"])} · {d["date"] or "날짜 ?"}</div><div class="ik-dt">{esc(d["title"])}</div>',
+                unsafe_allow_html=True)
+    lines = ''.join(f'<div class="ln"><span>{w}</span><p>{mark(esc(t), d)}</p></div>' for w, t in K.clues(d))
+    basis = ''.join(f'<li>{esc(x)}</li>' for x in K.why(d))
+    st.markdown(f'<div class="ik-clue"><small>원문에서 찾은 단서</small>{lines}<ul>{basis}</ul></div>', unsafe_allow_html=True)
+    if st.button('📄 원문 전체 보기', key=f'ik_view_{district}_{i}', width='stretch',
+                 help='문서 본문 전체를 크게 띄우고, 원본 파일을 내려받을 수 있습니다.'):
+        show_original(d)
+    tag = f"{district}_{i}_{d['status']}_{d['facility']}_{d['content']}_{d['date']}"
+    opts = list(dict.fromkeys(list(facs) + [K.COMMON] + list(d.get('options') or []) + [d['facility']]))
+    fac = st.selectbox('① 어느 교통대책인가요?', opts, index=opts.index(d['facility']), key=f'ik_f_{tag}')
+    c1, c2 = st.columns(2)
+    content = c1.selectbox('② 어떤 내용인가요?', K.CONTENTS, key=f'ik_c_{tag}',
+                           index=K.CONTENTS.index(d['content']) if d['content'] in K.CONTENTS else len(K.CONTENTS) - 1)
+    try:
+        dv0 = datetime.strptime(d['date'], '%Y-%m-%d').date() if d['date'] else None
+    except ValueError:
+        dv0 = None
+    dv = c2.date_input('③ 문서 날짜' + ('' if d['date'] else ' (필수)'), value=dv0, key=f'ik_d_{tag}', format='YYYY-MM-DD')
+    date = dv.isoformat() if dv else ''
+    b1, b2 = st.columns([1, 1.6]) if edited else (None, st.container())
+    if edited and b1.button('↺ AI 판단으로', key=f'ik_rv_{tag}', width='stretch'):
+        d.update(facility=d['ai_fac'], content=d['ai_content'], date=d['ai_date'], status=d['ai_status'], how='규칙')
+        ik_save(district, docs)
+        st.session_state['ik_saved_msg'] = '↺ AI 판단으로 되돌렸습니다.'
+        st.session_state['ik_tbl_ver'] = st.session_state.get('ik_tbl_ver', 0) + 1
+        st.rerun()
+    was_need = d['status'] == '확인 필요'
+    if b2.button('결정하고 다음 확인 필요로' if was_need else '고친 내용 저장', type='primary', width='stretch',
+                 key=f'ik_go_{tag}', disabled=not date):
+        d.update(facility=fac, content=content, date=date)
+        now_edited = wz_edited(d)
+        d['status'] = '사람 결정' if (was_need or now_edited) else d.get('ai_status', d['status'])
+        d['how'] = '담당자' if d['status'] == '사람 결정' else d.get('how')
+        if was_need or now_edited:
+            K.save_example(d, district)
+        ik_save(district, docs)
+        msg = f"✓ 고친 내용을 저장했습니다: {d['title']}" if now_edited else f"✓ AI 판단 그대로 두었습니다: {d['title']}"
+        if was_need:
+            nxt = wz_next_need(docs)
+            st.session_state['ik_focus'] = nxt if nxt is not None else i
+            if nxt is None:
+                msg = '✓ 확인 필요 문서를 모두 결정했습니다. 다른 문서도 틀린 게 보이면 표에서 눌러 고치세요.'
+        st.session_state['ik_saved_msg'] = msg
+        st.session_state['ik_tbl_ver'] = st.session_state.get('ik_tbl_ver', 0) + 1  # 표에 남은 행 선택을 비움
+        st.rerun()
+    if not date:
+        st.caption('날짜를 넣어야 결정할 수 있습니다.')
 
-    left, mid, right = st.columns([0.95, 3.6, 1.35], gap='small')
-    sel_fac = st.session_state.get('ik_sel_fac')
-    with left, card():
-        ik_fac_list(facs, docs, sel_fac)
-    with mid, card():
-        tab = st.segmented_control('보기', ['대책 기준정보 · 보고서 추출', f'적재 문서 {len(docs)}건'], key='ik_tab',
-                                   default=f'적재 문서 {len(docs)}건', label_visibility='collapsed') or f'적재 문서 {len(docs)}건'
-        if tab.startswith('대책'):
-            ik_basis(district, facs, state, docs)
-            pick = None
+
+def wz_detect_box(files, district, step0):
+    """올린 문서로 사업지구를 찾는다. 1단계에서는 지구를 자동으로 바꾸거나 새 지구 등록 칸을 보여 준다.
+    반환: (mismatch 지구 또는 None, 새 지구라 아직 못 넘어가는지)"""
+    if not files:
+        return None, False
+    det, fsig = ik_detect(files)
+    if not det:
+        return None, False
+    if step0 and det['known'] and det['known'] != district and st.session_state.get('ik_auto_sig') != fsig:
+        st.session_state['ik_auto_sig'] = fsig  # 같은 파일로는 한 번만 자동 전환(그 뒤 사람이 바꾸면 그대로)
+        st.session_state['ik_district_next'] = det['known']
+        flash(f"올린 문서를 보고 사업지구를 **{det['known']}**(으)로 골랐습니다. (근거: {det['evidence']})")
+        st.rerun()
+    if not det['known']:
+        if step0:
+            ik_register_box(det)
+        return None, True
+    mismatch = det['known'] if det['known'] != district else None
+    if step0 or mismatch:
+        st.markdown(f"<div class='ik-det{' bad' if mismatch else ''}'>🔎 문서로 찾은 사업지구: <b>{esc(det['known'])}</b>"
+                    + (f" — 지금 고른 지구({esc(district)})와 다릅니다. 이대로는 DB에 적재하지 않습니다." if mismatch else ' ✓')
+                    + (f"<small>근거: {esc(det['evidence'])}" + (f" · 다른 지구 문서도 섞여 있음: {esc(', '.join(det['others']))}"
+                                                               if det['others'] else '') + '</small>') + '</div>', unsafe_allow_html=True)
+    return mismatch, False
+
+
+def wz_new_batch(district):
+    """적재를 마친 뒤 새 자료를 올릴 때: 올리기 칸과 이번 묶음 상태를 비우고 1단계부터"""
+    st.session_state.setdefault('ik', {}).pop(district, None)
+    st.session_state['ik_up_ver'] = st.session_state.get('ik_up_ver', 0) + 1
+    for k in ('ik_sample_on', 'ik_focus', 'ik_det', 'ik_auto_sig', 'ik_qf'):
+        st.session_state.pop(k, None)
+    st.session_state['ik_step'] = st.session_state['ik_reached'] = 0
+    st.rerun()
+
+
+def page_intake():
+    ss = st.session_state
+    district_names = list(dict.fromkeys((district_options() if db.facts(con) else []) + CAT['districts']))
+    if 'ik_district_next' in ss:  # 문서로 찾은 지구·새로 등록한 지구로 바꿈(위젯 그리기 전에)
+        ss['ik_dist'] = ss['district'] = ss.pop('ik_district_next')
+        if ss['ik_dist'] not in district_names:
+            district_names.append(ss['ik_dist'])
+    step, reached = ss.get('ik_step', 0), ss.get('ik_reached', 0)
+    if step == 0 and ss.get('district') in district_names:
+        ss['ik_dist'] = ss['district']  # 사람이 고른 지구
+    district = ss.get('ik_dist')
+    if district not in district_names:
+        district = ss['ik_dist'] = CAT['default'] if CAT['default'] in district_names else district_names[0]
+    ss['district'] = district
+    facs = ik_facilities(district)
+    store = ss.setdefault('ik', {})
+    state = store.get(district, {'docs': [], 'basis': [], 'n_ai': 0, 'sig': ''})
+    files = wz_uploader(step) if step else []  # 1단계에서는 오른쪽 칸 안에 그린다(아래)
+    docs = state['docs']
+    review = [d for d in docs if d['status'] != '적재 완료']
+    need = sum(d['status'] == '확인 필요' for d in docs)
+    loaded = bool(docs) and not review
+    wz_stepper(step, reached, loaded and step == 2, need if state.get('sig') else 0)
+
+    with st.container(border=True, key='card_wz'):
+        # ── 1단계: 자료 올리기
+        if step == 0:
+            wz_head(0, '여러 파일을 한 번에 올리세요. 사업지구는 문서를 보고 알아서 고릅니다.')
+            left, right = st.columns([1, 1.4], gap='large')
+            with right:
+                files = wz_uploader(0)
+            with left:
+                st.selectbox('사업지구 (문서를 올리면 자동으로 고릅니다)', district_names, key='district')
+                mismatch, is_new = wz_detect_box(files, district, True)
+                if not files:
+                    st.caption('처음 보는 사업지구면 이 자리에서 바로 등록합니다.')
+            with right:
+                if not files and INTAKE_SAMPLE.exists():
+                    n_s = sum(K.guess_kind(p.name) in INTAKE_KINDS for p in INTAKE_SAMPLE.iterdir())
+                    if st.button(f'📁 처음이라면 모의 자료(누리마루지구 {n_s}건)로 해 보기', key='ik_sample_btn', type='tertiary'):
+                        ss['ik_sample_on'] = True
+                        st.rerun()
+                if files:
+                    st.markdown('<ul class="files">' + ''.join(
+                        f'<li><span class="ext">{Path(p).suffix[1:].upper()}</span>{esc(Path(p).stem)}<span class="k">{esc(K.KIND_SHORT.get(k, k))}</span></li>'
+                        for p, k in files) + '</ul>', unsafe_allow_html=True)
+            show_flash()
+            ok = bool(files) and not is_new and not mismatch
+            if wz_foot(0, '다음: AI로 분류하기 →', ok,
+                       f'파일 {len(files)}개를 올렸습니다.' if files else '파일을 올리면 다음 단계로 갈 수 있습니다.'):
+                wz_go(1)
+
+        # ── 2단계: AI 분류 · 사람 확인
+        elif step == 1:
+            sig = district + '|' + '|'.join(sorted(f'{p}:{k}:{Path(p).stat().st_size}' for p, k in files))
+            if not files:
+                wz_head(1, '먼저 1단계에서 자료를 올려 주세요.')
+                wz_foot(1)
+            elif state.get('sig') != sig:  # AI가 일하는 모습: 실제 처리 단계에 맞춰 한 칸씩
+                wz_head(1, 'AI가 문서를 읽고 나누는 중입니다. 잠시만 기다려 주세요. (담당자가 할 일은 없습니다)')
+                box = st.empty()
+                state = ik_build(district, files, on_phase=lambda k: box.markdown(wz_phases(WZ_AI_PHASES, k), unsafe_allow_html=True))
+                box.markdown(wz_phases(WZ_AI_PHASES, len(WZ_AI_PHASES)), unsafe_allow_html=True)
+                store[district] = state | {'sig': sig}
+                ss['ik_tbl_ver'] = ss.get('ik_tbl_ver', 0) + 1
+                ss['ik_focus'] = wz_next_need(state['docs'])
+                st.rerun()
+            else:
+                wz_head(1, 'AI가 나눈 결과입니다. 주황색 확인 필요 문서를 먼저 결정하세요. 자동 확정 문서도 틀린 게 보이면 눌러서 '
+                           '고칠 수 있습니다. DB에는 고친 값이 들어갑니다.')
+                mismatch, _ = wz_detect_box(files, district, False)
+                n_why = sum(d.get('ai_status') == '확인 필요' for d in review)
+                fixed = sum(wz_edited(d) for d in review)
+                st.markdown(f'<div class="strip"><span class="ok">🤖 AI 분류 완료</span>문서 <b>{len(review)}</b>건 중 자동 확정 '
+                            f'<b class="s-ok">{len(review) - n_why}</b> · 확인 필요 <b class="s-warn">{n_why}</b>'
+                            + (f' · AI 추천 {state["n_ai"]}건' if state.get('n_ai') else '')
+                            + f'<span class="right">{f"남은 확인 <b class=s-warn>{need}</b>건" if need else "✓ 확인 끝"}'
+                            + (f' · 고친 문서 <b class="s-blue">{fixed}</b>건' if fixed else '') + '</span></div>',
+                            unsafe_allow_html=True)
+                if not review:
+                    st.markdown('<div class="alldone">이번에 올린 문서는 모두 DB에 적재했습니다. 3단계에서 결과를 보거나 새 자료를 올리세요.</div>',
+                                unsafe_allow_html=True)
+                    if wz_foot(1, '3단계로 →', True, '', key='wz_to3'):
+                        wz_go(2)
+                else:
+                    left, right = st.columns([1.45, 1], gap='medium')
+                    with left:
+                        filt = {'전체': lambda d: True, '확인 필요만': lambda d: d['status'] == '확인 필요', '고친 문서만': wz_edited}
+                        qf = st.pills('거르기', list(filt), key='ik_qf', default='전체', label_visibility='collapsed',
+                                      format_func=lambda t: f'{t} {sum(filt[t](d) for d in review)}') or '전체'
+                        idx = wz_sorted(docs, [j for j, d in enumerate(docs) if d['status'] != '적재 완료' and filt[qf](d)])
+                        pick = wz_table(docs, idx, ss.get('ik_focus')) if idx else None
+                        if not idx:
+                            st.info('해당 문서가 없습니다.')
+                        st.caption('행을 누르면 오른쪽에서 확인·수정합니다. 고친 칸은 "AI 값 → 고친 값"으로 표시됩니다.')
+                    focus = pick if pick is not None else ss.get('ik_focus')
+                    if focus is None or focus >= len(docs) or docs[focus]['status'] == '적재 완료':
+                        focus = idx[0] if idx else None
+                    with right:
+                        if focus is None:
+                            st.markdown('<div class="ik-none">표에서 문서를 고르면<br>여기에서 확인·수정합니다.</div>', unsafe_allow_html=True)
+                        else:
+                            wz_detail(district, docs, focus, facs)
+                    show_flash()
+                    ready = sum(d['status'] in ('자동 확정', '사람 결정') for d in docs)
+                    hint = (f'확인 필요 {need}건을 결정하면 다음으로 갈 수 있습니다.' if need else
+                            f'잠긴 이유: 문서는 {mismatch} 것으로 보입니다. 1단계에서 사업지구를 맞추세요.' if mismatch else
+                            '✓ 확인 필요 없음' + (f' · 담당자가 고친 문서 {fixed}건' if fixed else ''))
+                    if wz_foot(1, f'DB에 적재하기 ({ready}건) →', ready > 0 and not need and not mismatch, hint):
+                        ss['ik_loading'] = True
+                        wz_go(2)
+
+        # ── 3단계: DB 적재
         else:
-            f1, f2 = st.columns([1, 1.2])
-            kinds = ['전체'] + [K.KIND_SHORT[k] for k in INTAKE_KINDS if any(d['kind'] == k for d in docs)]
-            kf = f1.pills('자료', kinds, key='ik_kf', default='전체', label_visibility='collapsed') or '전체'
-            sf = f2.pills('상태', ['모든 상태'] + K.STATUS, key='ik_sf', default='모든 상태', label_visibility='collapsed') or '모든 상태'
-            idx = [j for j, d in enumerate(docs) if (kf == '전체' or K.KIND_SHORT[d['kind']] == kf)
-                   and (sf == '모든 상태' or d['status'] == sf) and (sel_fac is None or d['facility'] == sel_fac)]
-            pick = ik_table(docs, idx) if idx else None
-            if not idx:
-                st.info('조건에 맞는 문서가 없습니다.')
-            st.caption('행을 누르면 오른쪽에서 원문 단서와 AI 판단을 봅니다. 확인 필요 문서는 오른쪽에서 바로 결정합니다.')
-    focus = pick if pick is not None else st.session_state.get('ik_focus')
-    with right, card():
-        if focus is None or focus >= len(docs):
-            st.markdown('<div class="ik-none">표에서 문서를 고르면<br>여기에서 확인·결정합니다.</div>', unsafe_allow_html=True)
-        else:
-            ik_detail(district, docs, focus, facs)
-
-
-def ik_basis(district, facs, state, docs):
-    """대책 기준정보 탭: 등록된 교통대책과, 올린 대책 보고서에서 찾은 사업 이름 비교."""
-    found = catalog.suggest_facilities([b['text'] for b in state['basis'] if b.get('text')]) if state['basis'] else []
-    names = {f['name'] for f in found}
-    rows = [{'번호': f'{i + 1:02d}', '교통대책': f, '유형': CAT['types'].get((district, f), ''),
-             '적재 문서': sum(d['facility'] == f for d in docs),
-             '대책 보고서': ('있음' if any(_ns_eq(f, n) for n in names) else '없음') if state['basis'] else '—'}
-            for i, f in enumerate(facs)]
-    st.dataframe(pd.DataFrame(rows), hide_index=True, width='stretch')
-    extra = [n for n in names if not any(_ns_eq(f, n) for f in facs)]
-    if extra:
-        st.warning('대책 보고서에는 있지만 등록되지 않은 사업: ' + ', '.join(extra)
-                   + ' — 💾 DB › 📂 문서 관리의 "새 사업지구 추가"에서 사업 목록을 고치세요.')
-    if not state['basis']:
-        st.caption('"광역교통개선대책 보고서" 칸에 대책 보고서를 올리면, 보고서에서 찾은 사업과 등록된 대책을 비교합니다.')
-
-
-def _ns_eq(a, b):
-    n = lambda s: re.sub(r'\s|\(.*?\)', '', s)  # noqa: E731
-    return n(a) == n(b) or n(a) in n(b) or n(b) in n(a)
+            if ss.get('ik_loading'):  # 적재 중: 실제 추출·판정 단계에 맞춰 한 칸씩 → 끝나면 적재 현황·관리로
+                n_ready = sum(d['status'] in ('자동 확정', '사람 결정') for d in docs)
+                wz_head(2, f'AI가 확인된 문서 {n_ready}건을 DB에 쌓는 중입니다. 잠시만 기다려 주세요. (담당자가 할 일은 없습니다)')
+                box = st.empty()
+                ik_load_db(district, state, on_phase=lambda k: box.markdown(wz_phases(WZ_LOAD_PHASES, k), unsafe_allow_html=True))
+                box.markdown(wz_phases(WZ_LOAD_PHASES, len(WZ_LOAD_PHASES),
+                                       '<p class="caption" style="text-align:center;margin-top:14px">✓ 적재 완료 — 적재 현황·관리로 이동합니다…</p>'),
+                             unsafe_allow_html=True)
+                ss['ik_loading'] = False
+                ss['ik_just_loaded'] = True
+                ss['db_view_next'] = DB_VIEWS[1]
+                st.rerun()
+            wz_head(2, '확인을 마친 문서를 DB에 쌓는 단계입니다.')
+            done = [d for d in docs if d['status'] == '적재 완료']
+            if done:
+                st.markdown(f'<div class="finish"><h3>✓ 문서 {len(done)}건 적재 완료</h3><p>DB에 들어간 값은 적재 현황·관리에서 보고 고칠 수 '
+                            '있습니다. 자료가 더 있으면 <b>새 자료 올리기</b>로 1단계부터 다시 올리세요.</p></div>', unsafe_allow_html=True)
+                c1, c2, c3 = st.columns(3)
+                if c1.button('📥 새 자료 올리기', width='stretch'):
+                    wz_new_batch(district)
+                if c2.button('🗂 적재 현황·관리 보기', width='stretch'):
+                    ss['db_view_next'] = DB_VIEWS[1]
+                    st.rerun()
+                if c3.button('보고서 작성으로 →', type='primary', width='stretch'):
+                    ss['goto'] = REPORT
+                    st.rerun()
+            else:
+                st.markdown('<div class="alldone">아직 적재한 문서가 없습니다. 2단계에서 확인을 마치고 <b>[DB에 적재하기]</b>를 누르세요.</div>',
+                            unsafe_allow_html=True)
+            wz_foot(2)
 
 
 # ---------------- 🔎 통합 비교 ----------------
@@ -1753,16 +2019,27 @@ def page_compare():
 
 
 # ---------------- 💾 DB ----------------
+DB_HERO = {DB_VIEWS[0]: ('자료를 DB에 쌓는 3단계', '위 순서대로 한 단계씩 진행하면 됩니다. 끝나면 보고서 작성에서 바로 쓸 수 있어요.'),
+           DB_VIEWS[1]: ('DB 적재 현황·관리', 'DB에 들어간 값과 문서를 보고, 값 충돌을 고르거나 문서 정보를 고치는 곳입니다.')}
+
+
 def page_db():
-    st.markdown('<div class="nw-hero"><h1>자료만 올리세요.<br>보고서는 알아서 쓸게요.</h1>'
-                '<p>올린 자료를 교통대책별로 나눠 DB에 쌓고, 양식에 맞춘 보고서 초안을 작성해서 보여 드려요.</p>'
-                '</div>', unsafe_allow_html=True)
-    if 'db_view_next' in st.session_state:  # 샘플 DB를 불러온 뒤 적재 현황·관리로(위젯 그리기 전에)
+    if 'db_view_next' in st.session_state:  # 적재·샘플 DB 뒤 적재 현황·관리로(위젯 그리기 전에)
         st.session_state['db_view'] = st.session_state.pop('db_view_next')
     if st.session_state.get('db_view') not in DB_VIEWS:
         st.session_state['db_view'] = DB_VIEWS[0]
-    view = st.segmented_control('DB 보기', DB_VIEWS, key='db_view', label_visibility='collapsed') or DB_VIEWS[0]
+    n_docs = len(db.sources(con))
+    h1, h2 = st.columns([3, 2], vertical_alignment='bottom')
+    title, desc = DB_HERO[st.session_state['db_view']]
+    h1.markdown(f'<div class="wz-hero"><h1>{title}</h1><p>{desc}</p></div>', unsafe_allow_html=True)
+    view = h2.segmented_control('DB 보기', DB_VIEWS, key='db_view', label_visibility='collapsed',
+                                format_func=lambda v: f'{v} {n_docs}' if v == DB_VIEWS[1] and n_docs else v) or DB_VIEWS[0]
     {DB_VIEWS[0]: page_intake, DB_VIEWS[1]: page_docs}[view]()
+    if view == DB_VIEWS[0] and n_docs and not st.session_state.get('ik_loading'):  # 떠 있는 '보고서 쓰기' 버튼
+        n_vals = sum(f['value'] is not None for f in db.facts(con))
+        if st.button(f'📝 이 DB로 보고서 쓰기 →  (문서 {n_docs}건 · 값 {n_vals}건)', key='fab'):
+            st.session_state['goto'] = REPORT
+            st.rerun()
 
 
 # ---------------- 화면 전환 (상단 바: 디딤돌 로고 · 새 보고서 · 내 보고서 · 자료 DB · 서식 규칙) ----------------
@@ -1781,9 +2058,18 @@ def top_bar(page):
                 st.session_state['goto'] = DOCS
                 st.rerun()
         with c2:
-            _, nav = st.columns([1.6, 1])
+            _, nav = st.columns([1, 1.15])
+            n_docs = len(db.sources(con))
             nav.segmented_control('메뉴', NAV, key='top_nav', label_visibility='collapsed',
+                                  format_func=lambda v: f'📝 {v}  · DB {n_docs}건' if v == REPORT and n_docs else v,
                                   on_change=lambda: st.session_state.update(nav=st.session_state['top_nav'] or st.session_state['nav']))
+    if page == REPORT:
+        st.session_state.pop('ik_just_loaded', None)
+    elif st.session_state.get('ik_just_loaded'):  # 방금 적재했으면 '보고서 작성'에 초록 점
+        st.markdown('<style>.st-key-top_nav button[data-variant]:last-of-type::after{content:"";position:absolute;top:2px;right:2px;'
+                    'width:10px;height:10px;border-radius:50%;background:#2fbf71;animation:wzping 1.4s infinite}'
+                    '@keyframes wzping{70%{box-shadow:0 0 0 8px rgba(47,191,113,0)}0%{box-shadow:0 0 0 0 rgba(47,191,113,.6)}}</style>',
+                    unsafe_allow_html=True)
 
 
 if 'goto' in st.session_state:
