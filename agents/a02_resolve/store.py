@@ -45,7 +45,64 @@ def connect(path=DB_PATH):
         con.executescript('drop table if exists sources; drop table if exists candidates; drop table if exists facts; '
                           'drop table if exists history; drop table if exists choices;')
     con.executescript(SCHEMA)
+    refresh_views(con)
     return con
+
+
+# ---------- 사람이 보기 좋은 가로형 보기(View) ----------
+# facts 표는 '사업 | 항목 | 값'을 한 줄씩 쌓는 세로형이라 항목이 늘어도 표를 고칠 필요가 없다.
+# 사람이 DB 파일을 열어 볼 때는 사업 한 줄에 항목이 칸으로 펼쳐진 보기가 편하므로, 같은 데이터를 보여 주는 View를 둔다.
+# View는 저장 공간을 따로 쓰지 않고 facts·events를 그때그때 펼쳐 보여 준다(값을 고치는 곳은 여전히 facts).
+VIEW_WIDE = '사업별_최신값'
+VIEW_EVENTS = '경위_일정_쟁점'
+
+
+def _config_items():
+    """config.yaml 항목 → [(항목, 단위)] 보기 좋은 순서: 속성 → 수치 → 날짜 → 문장 → 지구 공통"""
+    try:
+        import yaml
+        cfg = yaml.safe_load((OUTPUT.parent / 'config.yaml').read_text(encoding='utf-8')) or {}
+    except Exception:
+        return []
+    tpl, common = cfg.get('item_templates') or {}, cfg.get('common_items') or []
+    attrs = [x for x in common if x.get('kind') == 'attr']
+    texts = [x for x in common if x.get('kind') != 'attr']
+    typed = [x for k, v in tpl.items() if k != '지구' for x in (v or [])]
+    nums = [x for x in typed if x.get('unit')]
+    dates = [x for x in typed if not x.get('unit')]
+    out = {}
+    for x in attrs + nums + dates + texts + (tpl.get('지구') or []):
+        out.setdefault(x['item'], x.get('unit') or '')
+    return list(out.items())
+
+
+def refresh_views(con):
+    """가로형 보기를 다시 만든다(항목 목록이 바뀌어도 칸이 맞게). DB를 열 때마다 부른다."""
+    items = _config_items()
+    known = {i for i, _ in items}
+    items += [(r[0], r[1] or '') for r in con.execute('select item, max(unit) from facts group by item') if r[0] not in known]
+
+    def q(s):
+        return "'" + str(s).replace("'", "''") + "'"
+
+    def name(s):
+        return '"' + str(s).replace('"', '""') + '"'
+    # 값이 없는 미확정(충돌) 칸에는 후보들을 ' / '로 이어 보여 준다(예: 2031.12 / 2032.6 [미확정(충돌)])
+    cell = ("coalesce(value, (select group_concat(json_extract(j.value, '$.value'), ' / ') "
+            "from json_each(case when json_valid(conflict_candidates) then conflict_candidates else '[]' end) j), '')"
+            " || case when status = '확정' then '' else ' [' || status || ']' end")
+    cols = ',\n    '.join(f"max(case when item = {q(i)} then {cell} end) as {name(f'{i}({u})' if u else i)}" for i, u in items)
+    con.executescript(
+        f'drop view if exists {name(VIEW_WIDE)};\n'
+        f'create view {name(VIEW_WIDE)} as select district as "사업지구", facility as "사업",\n'
+        f"    sum(status <> '확정') as \"확인 필요 수\",\n    {cols}\n"
+        f"from facts group by district, facility\n"
+        f"order by district, case when facility = '지구 공통' then 0 else 1 end, facility;\n"
+        f'drop view if exists {name(VIEW_EVENTS)};\n'
+        f'create view {name(VIEW_EVENTS)} as select e.district as "사업지구", e.facility as "사업", e.kind as "종류",\n'
+        f'    e.date as "날짜", e.content as "내용", s.file as "출처 문서", e.location as "위치"\n'
+        f'from events e left join sources s on s.doc_id = e.doc_id\n'
+        f"order by e.district, e.facility, case e.kind when '경위' then 0 when '계획' then 1 else 2 end, e.date;\n")
 
 
 def rows(con, sql, args=()):

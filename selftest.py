@@ -449,6 +449,19 @@ def main():
     ok(f"관리카드(모의)에서 값 {sum(1 for k in f4 if k[0] in ('가온방면 연결도로', '누리마루선(광역철도)', catalog.DISTRICT_FAC))}개·"
        f"경위·일정 {len(ev4)}줄 적재 → 보고서에 지구 개요·착공/예상 완료·지연사유/만회대책·날짜별 경위·향후 일정 반영, 수치 대조 통과")
 
+    print('15) 가로형 보기(View): 사업별_최신값 · 경위_일정_쟁점')
+    db.refresh_views(con)
+    wide = {(r['사업지구'], r['사업']): r for r in db.rows(con, 'select * from "사업별_최신값"')}
+    fs = db.rows(con, 'select district, facility, item, value, unit, status from facts')
+    for f in fs:  # facts의 값이 View 칸에 그대로(미확정이면 [상태] 표시와 함께) 보이는지
+        cell = wide[(f['district'], f['facility'])][f"{f['item']}({f['unit']})" if f['unit'] else f['item']]
+        assert cell is not None and (f['value'] is None or cell.startswith(f['value'])), (f, cell)
+        assert (f['status'] == '확정') == ('[' not in cell), (f, cell)
+    assert len(wide) == len({(f['district'], f['facility']) for f in fs})
+    n_ev = con.execute('select count(*) from events').fetchone()[0]
+    assert len(db.rows(con, 'select * from "경위_일정_쟁점"')) == n_ev
+    ok(f'사업 {len(wide)}줄 × 항목 칸으로 펼침, facts 값 {len(fs)}개가 View와 일치, 경위·일정·쟁점 {n_ev}줄')
+
     print(f"\n모든 시험 통과. (LLM 연결: {'사용 가능' if llm.available() else '키 없음 → 샘플 모드'})")
     con.close()
 
