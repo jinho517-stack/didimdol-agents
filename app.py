@@ -481,43 +481,200 @@ ITEM_GROUPS = [  # DB 적재 현황 화면의 묶음(1차 적재 항목, 현안�
     ('현안·대응', ['현안', '지연사유', '만회대책', '향후계획'])]
 
 
+OV_KEY_ITEMS = ['연장', '규모', '사업비', '지원액', '완료시기', '개통목표', '예상완료']  # 카드에 보일 핵심 숫자 후보(앞에서부터 3개)
+OV_END_ITEMS = ('완료시기', '개통목표', '예상완료')
+OV_CSS = """<style>
+.ov-kpi{background:var(--dg-bg);border:1px solid var(--dg-line);border-radius:10px;padding:10px 14px}
+.ov-kpi .l{font-size:.78rem;color:var(--dg-mut)}.ov-kpi .n{font-size:1.45rem;font-weight:700;line-height:1.3}
+.ov-kpi.warn{background:#fff6e0;border-color:#f0c25a}.ov-kpi.warn .n,.ov-kpi.warn .l{color:#8a5a00}
+.ov-name{font-weight:700;font-size:.98rem;line-height:1.35}
+.ov-badge{display:inline-block;font-size:.72rem;padding:2px 8px;border-radius:6px;margin-top:4px;white-space:nowrap}
+.ov-b-warn{background:#fff1d6;color:#8a5a00}.ov-b-ok{background:#e3f3ea;color:#15513f}
+.ov-b-info{background:#e8eef9;color:#1d4b8f}.ov-b-gray{background:#f0efec;color:#4a4740}
+.ov-figs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;margin:10px 0 6px}
+.ov-figs .l{font-size:.7rem;color:var(--dg-mut)}.ov-figs .v{font-size:.92rem;font-weight:700}
+.ov-note{font-size:.78rem;color:var(--dg-mut);border-top:1px solid var(--dg-line);padding-top:6px;min-height:2.2em}
+[data-testid="stMain"] [class*="st-key-card"][class*="ovsel_"]{border:2px solid var(--dg-pri) !important;background:#f4f9f7 !important}
+.ov-grp-t{font-size:.8rem;font-weight:700;color:var(--dg-mut);margin:0 0 4px}
+.ov-r{display:flex;justify-content:space-between;gap:8px;font-size:.85rem;padding:4px 0;border-bottom:1px solid var(--dg-line)}
+.ov-r .k{color:var(--dg-mut);white-space:nowrap}.ov-r .v{text-align:right}
+.ov-src{font-size:.7rem;color:#8a877f;margin-left:4px}
+.ov-ev{display:grid;grid-template-columns:96px 52px 1fr 48px;gap:10px;font-size:.85rem;padding:6px 0;
+       border-bottom:1px solid var(--dg-line);align-items:baseline}
+.ov-tag{font-size:.72rem;padding:1px 6px;border-radius:6px;text-align:center}
+</style>"""
+
+
+def _ov_val(f):
+    """화면 표시용 값. 충돌로 미확정이면 '확인 필요'."""
+    if not f:
+        return ''
+    if f['status'] == A02.CONFLICT:
+        return '확인 필요'
+    return draft.fmt_value(f['value'], f['unit']) if f['value'] is not None else ''
+
+
+def _ov_badge(m, evs):
+    """사업 상태 표시: 확인 필요 > 관리상태·추진단계 > 추진상태 > 지연·쟁점 순."""
+    if any(f['status'] == A02.CONFLICT for f in m.values()):
+        return '확인 필요', 'warn'
+    delayed = bool(_ov_val(m.get('지연사유')))
+    for it in ('관리상태', '추진단계', '추진상태'):
+        v = _ov_val(m.get(it))
+        if v:
+            warn = delayed or any(w in v for w in ('지연', '우려', '중단', '보류'))
+            ok = any(w in v for w in ('정상', '계획대로', '완료'))
+            return (v if len(v) <= 12 else v[:11] + '…'), ('warn' if warn else 'ok' if ok else 'info')
+    if delayed or _ov_val(m.get('현안')) or any(e['kind'] == '쟁점' for e in evs):
+        return '현안 있음', 'warn'
+    return '상태 정보 없음', 'gray'
+
+
+def _ov_note(m):
+    for it in ('현안', '지연사유', '향후계획', '추진상태'):
+        v = _ov_val(m.get(it))
+        if v:
+            return (it + ': ' if it != '추진상태' else '') + (v if len(v) <= 40 else v[:39] + '…')
+    return '현안 없음'
+
+
+def _ov_eok(f):
+    """사업비 값을 억원 숫자로(합계용). 못 읽으면 None."""
+    if not f or f['value'] is None or f['status'] == A02.CONFLICT:
+        return None
+    t = re.sub(r'[,\s]', '', str(f['value']))
+    try:
+        n = float(t)
+    except ValueError:
+        return None
+    u = f['unit'] or ''
+    return n if '억' in u else n * 10000 if '조' in u else n / 1e8 if u in ('원', '') and n > 1e6 else n
+
+
 def db_overview():
-    """지구를 골라 DB에 적재된 값(지구 공통·사업별 항목)과 추진경위·향후 일정 목록을 본다."""
+    """🗂 DB 적재 현황: 지구 요약 숫자 → 사업별 카드(핵심 숫자·상태) → 고른 사업의 전체 항목과 그 사업의 추진경위·향후 일정."""
     names = district_options()
+    st.markdown(OV_CSS, unsafe_allow_html=True)
     with st.container(border=True, key='card_overview'):
-        st.markdown('**📋 DB 적재 현황** — 지구별 항목·추진경위')
+        st.markdown('**📋 DB 적재 현황** — 사업을 누르면 아래에 전체 항목과 그 사업의 추진경위가 펼쳐집니다')
         d = st.selectbox('사업지구', names, key='ov_district')
         facts = db.facts(con, district=d)
-        dist = [f for f in facts if f['facility'] == catalog.DISTRICT_FAC]
-        if dist:
-            st.markdown('**지구 공통** · ' + ' · '.join(f"{f['item']} {draft.fmt_value(f['value'], f['unit'])}"
-                                                    for f in dist if f['value'] is not None))
+        evs = db.events(con, d)
         by = {}
         for f in facts:
-            if f['facility'] != catalog.DISTRICT_FAC:
-                by.setdefault(f['facility'], {})[f['item']] = f
-        grp = st.segmented_control('묶음', [g for g, _ in ITEM_GROUPS], default=ITEM_GROUPS[0][0], key='ov_grp') or ITEM_GROUPS[0][0]
-        items = dict(ITEM_GROUPS)[grp]
-        rows = []
-        for fac, m in by.items():
-            row = {'사업': fac}
-            for it in items:
-                f = m.get(it)
-                row[it] = ('확인 필요' if f and f['status'] == '미확정(충돌)' else
-                           draft.fmt_value(f['value'], f['unit']) if f and f['value'] is not None else '')
-            rows.append(row)
-        if rows:
-            df = pd.DataFrame(rows)
-            df = df[['사업'] + [c for c in items if df[c].astype(bool).any()]]  # 모두 빈 열은 숨김
-            st.dataframe(df, hide_index=True, width='stretch',
-                         column_config={c: st.column_config.TextColumn(width='large') for c in ('현안', '지연사유', '만회대책', '향후계획')})
-        evs = db.events(con, d)
-        if evs:
-            st.markdown(f'**추진경위·향후 일정 {len(evs)}줄**')
-            st.dataframe(pd.DataFrame([{'사업': e['facility'], '구분': e['kind'], '날짜': e['date'], '내용': e['content'],
-                                        '근거 문서': e['doc_id']} for e in evs]), hide_index=True, width='stretch')
-        elif facts:
-            st.caption('추진경위·향후 일정 목록은 아직 없습니다(날짜와 함께 적힌 경위가 있는 문서를 올리면 쌓입니다).')
+            by.setdefault(f['facility'], {})[f['item']] = f
+        dist_m = by.pop(catalog.DISTRICT_FAC, {})
+        fac_list = list(by)
+        ev_by = {}
+        for e in evs:
+            ev_by.setdefault(e['facility'], []).append(e)
+
+        # 1) 지구 요약 숫자
+        name = _ov_val(dist_m.get('지구명칭')) or d
+        n_docs = len(db.sources(con, d))
+        st.markdown(f'<div style="display:flex;justify-content:space-between;align-items:baseline;margin:4px 0 8px">'
+                    f'<span style="font-size:1.1rem;font-weight:700">{esc(name)}</span>'
+                    f'<span style="font-size:.8rem;color:var(--dg-mut)">적재 문서 {n_docs}건</span></div>',
+                    unsafe_allow_html=True)
+        costs = [_ov_eok(m.get('사업비')) for m in by.values()]
+        costs = [c for c in costs if c is not None]
+        ends = [f['value'] for m in by.values() for it in OV_END_ITEMS
+                if (f := m.get(it)) and f['value'] and f['status'] != A02.CONFLICT]
+        n_chk = sum(f['status'] == A02.CONFLICT for f in facts)
+        k1, k2, k3, k4 = st.columns(4)
+        for col, label, val, warn in ((k1, '교통대책', f'{len(fac_list)}개', False),
+                                      (k2, '총사업비', f'{sum(costs):,.0f}억원' if costs else '—', False),
+                                      (k3, '가장 늦은 완료 목표', max(ends, key=db._date_key) if ends else '—', False),
+                                      (k4, '확인 필요 값', f'{n_chk}건', n_chk > 0)):
+            col.markdown(f'<div class="ov-kpi{" warn" if warn else ""}"><div class="l">{label}</div>'
+                         f'<div class="n">{esc(val)}</div></div>', unsafe_allow_html=True)
+        if not facts:
+            st.caption('이 지구에는 아직 적재된 값이 없습니다.')
+            return
+
+        # 2) 사업별 카드
+        cards = fac_list + ([catalog.DISTRICT_FAC] if dist_m or ev_by.get(catalog.DISTRICT_FAC) else [])
+        sel = st.session_state.get('ov_sel')
+        if sel not in cards:
+            sel = cards[0]
+        st.write('')
+        per_row = 3
+        for r0 in range(0, len(cards), per_row):
+            cols = st.columns(per_row)
+            for col, fac in zip(cols, cards[r0:r0 + per_row]):
+                i = cards.index(fac)
+                is_common = fac == catalog.DISTRICT_FAC
+                m = dist_m if is_common else by[fac]
+                fevs = ev_by.get(fac, [])
+                with col.container(border=True, key=(f'card_ovsel_{i}' if fac == sel else f'card_ov_{i}')):
+                    if is_common:
+                        badge, tone = f'경위 {len(fevs)}줄', 'gray'
+                        figs = [(it, _ov_val(f)) for it, f in m.items() if it != '지구명칭' and _ov_val(f)][:3]
+                        note = '지구 전체에 걸친 협의·회의 경위'
+                    else:
+                        badge, tone = _ov_badge(m, fevs)
+                        figs = [(it, _ov_val(m.get(it))) for it in OV_KEY_ITEMS if _ov_val(m.get(it))][:3]
+                        note = _ov_note(m)
+                    fig_html = ''.join(f'<div><div class="l">{esc(k)}</div><div class="v">{esc(v)}</div></div>'
+                                       for k, v in figs) or ('' if is_common else '<div><div class="l">핵심 수치 없음</div></div>')
+                    st.markdown(f'<div class="ov-name">{esc(fac)}</div><span class="ov-badge ov-b-{tone}">{esc(badge)}</span>'
+                                f'<div class="ov-figs">{fig_html}</div><div class="ov-note">{esc(note)}</div>',
+                                unsafe_allow_html=True)
+                    if st.button('펼쳐 보는 중 ▾' if fac == sel else '자세히 보기 ›', key=f'ov_btn_{i}',
+                                 type='tertiary', width='stretch'):
+                        st.session_state['ov_sel'] = fac
+                        st.rerun()
+
+        # 3) 고른 사업: 전체 항목 + 그 사업의 추진경위·향후 일정
+        is_common = sel == catalog.DISTRICT_FAC
+        m = dist_m if is_common else by[sel]
+        with st.container(border=True, key='card_ov_detail'):
+            st.markdown(f'<div style="font-size:1.05rem;font-weight:700;margin-bottom:6px">{esc(sel)} '
+                        f'<span style="font-size:.8rem;font-weight:400;color:var(--dg-mut)">· 전체 항목 (값 옆 회색 글씨는 출처)</span></div>',
+                        unsafe_allow_html=True)
+            groups = [(g, [it for it in its if it in m]) for g, its in ITEM_GROUPS]
+            grouped = {it for _, its in ITEM_GROUPS for it in its}
+            rest = [it for it in m if it not in grouped]
+            groups = [(g, its) for g, its in groups + [('기타', rest)] if its]
+            if groups:
+                gcols = st.columns(min(len(groups), 3))
+                for gi, (g, its) in enumerate(groups):
+                    rows_html = ''
+                    for it in its:
+                        f = m[it]
+                        src = ' '.join(x for x in (f.get('source_doc'), f.get('source_loc')) if x)
+                        v = _ov_val(f) or '—'
+                        vstyle = ' style="color:#8a5a00;font-weight:700"' if v == '확인 필요' else ''
+                        rows_html += (f'<div class="ov-r"><span class="k">{esc(it)}</span><span class="v"{vstyle}>{esc(v)}'
+                                      f'<span class="ov-src">{esc(src)}</span></span></div>')
+                    gcols[gi % len(gcols)].markdown(f'<div class="ov-grp-t">{esc(g)}</div>{rows_html}<div style="height:10px"></div>',
+                                                    unsafe_allow_html=True)
+            elif not is_common:
+                st.caption('이 사업에 적재된 항목 값이 없습니다.')
+            fevs = ev_by.get(sel, [])
+            st.markdown(f'**추진경위·향후 일정 {len(fevs)}줄**')
+            if fevs:
+                tone = {'쟁점': ('#fff1d6', '#8a5a00'), '계획': ('#e8eef9', '#1d4b8f')}
+                html = ''
+                for e in fevs:
+                    bg, fg = tone.get(e['kind'], ('#f0efec', '#4a4740'))
+                    html += (f'<div class="ov-ev"><span>{esc(e["date"] or "")}</span>'
+                             f'<span class="ov-tag" style="background:{bg};color:{fg}">{esc(e["kind"])}</span>'
+                             f'<span>{esc(e["content"])}</span><span class="ov-src">{esc(e["doc_id"])}</span></div>')
+                st.markdown(html, unsafe_allow_html=True)
+            else:
+                st.caption('이 사업의 추진경위·향후 일정은 아직 없습니다(날짜와 함께 적힌 경위가 있는 문서를 올리면 쌓입니다).')
+
+        # 4) 예전 표 보기(묶음별) — 여러 사업을 같은 항목끼리 비교할 때
+        with st.expander('표로 보기 · 여러 사업을 같은 항목끼리 비교'):
+            grp = st.segmented_control('묶음', [g for g, _ in ITEM_GROUPS], default=ITEM_GROUPS[0][0], key='ov_grp') or ITEM_GROUPS[0][0]
+            items = dict(ITEM_GROUPS)[grp]
+            rows = [{'사업': fac, **{it: _ov_val(m.get(it)) for it in items}} for fac, m in by.items()]
+            if rows:
+                df = pd.DataFrame(rows)
+                df = df[['사업'] + [c for c in items if df[c].astype(bool).any()]]  # 모두 빈 열은 숨김
+                st.dataframe(df, hide_index=True, width='stretch',
+                             column_config={c: st.column_config.TextColumn(width='large') for c in ('현안', '지연사유', '만회대책', '향후계획')})
 
 
 def page_docs():
